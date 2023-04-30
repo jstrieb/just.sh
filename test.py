@@ -1095,7 +1095,7 @@ NORMALIZE_REGEXES = [
     (re.compile(rb" +"), b" "),
     (re.compile(rb'"'), rb"'"),
     (re.compile(rb"tmp\.[a-zA-Z0-9]+"), rb"tmp"),
-    (re.compile(rb"\d{1,2}:\d{1,2}"), rb"12:00"), # Normalize times
+    (re.compile(rb"\d{1,2}:\d{1,2}"), rb"12:00"),  # Normalize times
     (re.compile(rb"\nDid you mean[^\n]*"), rb""),
     (re.compile(rb"\s*\|[^\n]*\n\s*\d*?\s*\|[^\n]*\n\s*\|[^\n]*"), rb""),
 ]
