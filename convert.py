@@ -8,6 +8,7 @@ import sys
 from typing import IO, Any, Callable, Dict, List, Optional, Tuple, TypeVar, Union
 
 from parse import (
+    Alias,
     Assignment,
     Backtick,
     Conditional,
@@ -17,6 +18,7 @@ from parse import (
     ExpressionType,
     Function,
     Neq,
+    Recipe,
     RegexEq,
     Setting,
     Sum,
@@ -288,7 +290,6 @@ class CompilerState:
         self.parsed = parsed
         self.internal_names: Dict[str, str] = dict()
         self.recipes: List[str] = []
-        self.private_recipes: List[str] = []
         self.platform_specific_recipes: Dict[str, Dict[str, str]] = defaultdict(dict)
         self.comments: Dict[str, str] = dict()
         self.parameters: Dict[str, List[str]] = dict()
@@ -299,6 +300,7 @@ class CompilerState:
         self.exports: List[str]
         self.variables, self.exports = self.process_variables()
         self.functions: Dict[str, str] = self.process_used_functions()
+        self.private_recipes: List[str] = self.process_private_recipes()
 
     def process_settings(self) -> Dict[str, Union[bool, None, List[str]]]:
         """
@@ -436,6 +438,14 @@ class CompilerState:
             find_functions(item)
 
         return functions
+
+    def process_private_recipes(self) -> List[str]:
+        private_recipes = []
+        for item in self.parsed:
+            if isinstance(item.item, Recipe) or isinstance(item.item, Alias):
+                if "private" in item.attributes.names or item.item.name.startswith("_"):
+                    private_recipes.append(item.item.name)
+        return private_recipes
 
     def clean_name(self, to_clean: str, prefix: str = "") -> str:
         """
