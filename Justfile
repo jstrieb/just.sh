@@ -11,6 +11,8 @@ test: lint-python
       --show-missing \
       --fail-under {{ REQUIRED_COVERAGE }}
 
+alias lint := lint-python
+
 lint-python:
     black .
     mypy .
