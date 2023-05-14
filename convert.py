@@ -11,6 +11,7 @@ from parse import (
     Alias,
     Assignment,
     Backtick,
+    Comment,
     Conditional,
     Div,
     Eq,
@@ -288,19 +289,21 @@ def get_function(name: str) -> str:
 class CompilerState:
     def __init__(self, parsed) -> None:
         self.parsed = parsed
-        self.internal_names: Dict[str, str] = dict()
-        self.recipes: List[str] = []
         self.platform_specific_recipes: Dict[str, Dict[str, str]] = defaultdict(dict)
-        self.comments: Dict[str, str] = dict()
         self.parameters: Dict[str, List[str]] = dict()
         self.aliases: Dict[str, List[str]] = defaultdict(list)
 
+        self.internal_names: Dict[str, str] = dict()
         self.settings: Dict[str, Union[bool, None, List[str]]] = self.process_settings()
         self.variables: Dict[str, ExpressionType]
         self.exports: List[str]
         self.variables, self.exports = self.process_variables()
         self.functions: Dict[str, str] = self.process_used_functions()
         self.private_recipes: List[str] = self.process_private_recipes()
+        self.recipes: List[str] = self.list_all_recipes(
+            self.settings.get("allow-duplicate-recipes")
+        )
+        self.docstrings: Dict[str, str] = self.process_docstrings()
 
     def process_settings(self) -> Dict[str, Union[bool, None, List[str]]]:
         """
@@ -446,6 +449,38 @@ class CompilerState:
                 if "private" in item.attributes.names or item.item.name.startswith("_"):
                     private_recipes.append(item.item.name)
         return private_recipes
+
+    def list_all_recipes(self, allow_duplicate_recipes) -> List[str]:
+        recipes = []
+        for item in self.parsed:
+            if isinstance(item.item, Recipe):
+                # Filter out platform-specific attributes (e.g., drop "private")
+                platform_attributes = {"windows", "macos", "linux", "unix"} & set(
+                    item.attributes.names
+                )
+                if (
+                    item.item.name in recipes
+                    and not allow_duplicate_recipes
+                    and not platform_attributes
+                ):
+                    raise ValueError("No duplicate recipes!")
+
+                recipes.append(item.item.name)
+        return recipes
+
+    def process_docstrings(self) -> Dict[str, str]:
+        docstrings = dict()
+        for item_index, item in enumerate(self.parsed):
+            if isinstance(item.item, Recipe):
+                recipe = item.item
+                if "private" not in item.attributes and not recipe.name.startswith("_"):
+                    # Store docstrings, but only for non-private recipes
+                    previous = (
+                        self.parsed[item_index - 1].item if item_index > 0 else None
+                    )
+                    if isinstance(previous, Comment):
+                        docstrings[recipe.name] = previous.comment
+        return docstrings
 
     def clean_name(self, to_clean: str, prefix: str = "") -> str:
         """
