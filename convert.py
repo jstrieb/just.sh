@@ -5,13 +5,22 @@ import logging
 import os
 import stat
 import sys
-from typing import IO, Dict, List, Tuple, TypeVar, Union
+from typing import IO, Any, Callable, Dict, List, Optional, Tuple, TypeVar, Union
 
 from parse import (
     Assignment,
+    Backtick,
+    Conditional,
+    Div,
+    Eq,
     Export,
     ExpressionType,
+    Function,
+    Neq,
+    RegexEq,
     Setting,
+    Sum,
+    Variable,
     parse as justfile_parse,
 )
 
@@ -289,8 +298,7 @@ class CompilerState:
         self.variables: Dict[str, ExpressionType]
         self.exports: List[str]
         self.variables, self.exports = self.process_variables()
-        self.functions: Dict[str, str] = self.process_non_portable_recipes()
-        # process_used_functions()
+        self.functions: Dict[str, str] = self.process_used_functions()
 
     def process_settings(self) -> Dict[str, Union[bool, None, List[str]]]:
         """
@@ -333,13 +341,17 @@ class CompilerState:
                 variables[assignment.name] = assignment.value
         return variables, exports
 
-    def process_non_portable_recipes(self) -> Dict[str, str]:
+    def process_used_functions(self) -> Dict[str, str]:
         """
-        Walk the AST and update the compiler's function mapping to include `os`
-        or `os_family` in the generated script for the platform check to use
-        at runtime.
+        Walk the parsed structure and find all functions required for variable
+        assignments.
+
+        Also walk the AST and update the compiler's function mapping to include
+        `os` or `os_family` in the generated script for the platform check to
+        use at runtime.
         """
         functions = dict()
+
         for item in self.parsed:
             if item.attributes.names and {"windows", "macos", "linux"} & set(
                 item.attributes.names
@@ -347,7 +359,164 @@ class CompilerState:
                 functions["os"] = get_function("os")
             elif item.attributes.names and "unix" in item.attributes.names:
                 functions["os_family"] = get_function("os_family")
+
+        # Closure over local `functions` variable
+        def find_functions(ast_item) -> Any:
+            """
+            Recursively walk the AST and up `functions` with any function in the
+            tree.
+            """
+            if isinstance(ast_item, Sum):
+                return find_functions(ast_item.sum_1), find_functions(ast_item.sum_2)
+            if isinstance(ast_item, Div):
+                return find_functions(ast_item.div_1), find_functions(ast_item.div_2)
+            if isinstance(ast_item, Backtick):
+                functions["backtick_error"] = (
+                    "backtick_error() {\n"
+                    '  STATUS="${?}"\n'
+                    '  echo_error "Backtick failed with exit code ${STATUS}"\n'
+                    '  exit "${STATUS}"\n'
+                    "}\n"
+                )
+                return
+            if isinstance(ast_item, Conditional):
+                conditional_function_name = self.clean_name(
+                    f"if_{sha256(str(ast_item))[:16]}"
+                )
+                if isinstance(ast_item.if_condition, RegexEq):
+                    functions[conditional_function_name] = (
+                        f"{conditional_function_name}() {{\n"
+                        f"  if "
+                        f"echo {self.evaluate(ast_item.if_condition.left)} | "
+                        f"grep -E {self.evaluate(ast_item.if_condition.right)} > /dev/null; "
+                        f"then \n"
+                        f'    THEN_EXPR={self.evaluate(ast_item.then)} || exit "${{?}}"\n'
+                        f'    echo "${{THEN_EXPR}}"\n'
+                        f"  else\n"
+                        f'    ELSE_EXPR={self.evaluate(ast_item.else_then)} || exit "${{?}}"\n'
+                        f'    echo "${{ELSE_EXPR}}"\n'
+                        f"  fi\n"
+                        f"}}\n"
+                    )
+                    return
+                if isinstance(ast_item.if_condition, Eq):
+                    comparison = "="
+                elif isinstance(ast_item.if_condition, Neq):
+                    comparison = "!="
+                else:
+                    raise ValueError(f"Bad if condition {str(ast_item.if_condition)}.")
+                functions[conditional_function_name] = (
+                    f"{conditional_function_name}() {{\n"
+                    f"  if [ "
+                    f"{self.evaluate(ast_item.if_condition.left)} "
+                    f"{comparison} "
+                    f"{self.evaluate(ast_item.if_condition.right)} ]; then \n"
+                    f'    THEN_EXPR={self.evaluate(ast_item.then)} || exit "${{?}}"1\n'
+                    f'    echo "${{THEN_EXPR}}"\n'
+                    f"  else\n"
+                    f'    ELSE_EXPR={self.evaluate(ast_item.else_then)} || exit "${{?}}"\n'
+                    f'    echo "${{ELSE_EXPR}}"\n'
+                    f"  fi\n"
+                    f"}}\n"
+                )
+                return
+            if isinstance(ast_item, Function):
+                conditional_function_name = ast_item.name
+                functions[conditional_function_name] = get_function(
+                    conditional_function_name
+                )
+                return (
+                    (find_functions(argument) for argument in ast_item.arguments)
+                    if ast_item.arguments
+                    else None
+                )
+            raise ValueError(f"Unexpected expression type {str(ast_item)}")
+
+        for item in self.parsed:
+            find_functions(item)
+
         return functions
+
+    def clean_name(self, to_clean: str, prefix: str = "") -> str:
+        """
+        Shell names with dashes are not portable. They're necessary to keep
+        around in some places for consistency, but internally, use underscored
+        versions.
+        """
+        to_clean = prefix + to_clean
+        cleaned = to_clean.replace("-", "_")
+        # Handle the rare case when the Justfile contains names like "some-name"
+        # AND "some_name"
+        num = 2
+        while (
+            cleaned in self.internal_names and self.internal_names[cleaned] != to_clean
+        ):
+            cleaned = f'{to_clean.replace("-", "_")}_{num}'
+            num += 1
+        self.internal_names[cleaned] = to_clean
+        return cleaned
+
+    def clean_var_name(self, to_clean: str) -> str:
+        return self.clean_name(to_clean, prefix="VAR_")
+
+    def clean_fun_name(self, to_clean: str) -> str:
+        return self.clean_name(to_clean, prefix="FUN_")
+
+    def evaluate(self, to_eval: ExpressionType, quote: bool = True) -> str:
+        """
+        Return a string that can be used for variable interpolations in the
+        generated script.
+        """
+        # mypy HATES him because of this one weird trick!
+        # https://github.com/python/mypy/issues/10740
+        quote_function: Callable[..., str]
+        if quote:
+            quote_function = quote_string
+        else:
+            quote_function = identity
+        if isinstance(to_eval, str):
+            return quote_function(to_eval)
+        if isinstance(to_eval, Variable):
+            return quote_function(
+                f"${{{self.clean_var_name(to_eval.name)}}}", quote='"'
+            )
+        if isinstance(to_eval, Sum):
+            return self.evaluate(to_eval.sum_1, quote=quote) + self.evaluate(
+                to_eval.sum_2, quote=quote
+            )
+        if isinstance(to_eval, Div):
+            return (
+                self.evaluate(to_eval.div_1, quote=quote)
+                + "'/'"
+                + self.evaluate(to_eval.div_2, quote=quote)
+            )
+        if isinstance(to_eval, Backtick):
+            return (
+                f'"$('
+                f'env "${{DEFAULT_SHELL}}" ${{DEFAULT_SHELL_ARGS}} '
+                f"{quote_function(to_eval.command)}"
+                f" || backtick_error"
+                f')"'
+            )
+        # For the following two cases, the actual content of the functions is
+        # set in internal state in `process_used_functions`
+        if isinstance(to_eval, Conditional):
+            conditional_function_name = self.clean_name(
+                f"if_{sha256(str(to_eval))[:16]}"
+            )
+            return quote_function(f"$({conditional_function_name})", quote='"')
+        if isinstance(to_eval, Function):
+            conditional_function_name = to_eval.name
+            return (
+                f'"$({self.clean_name(conditional_function_name)}'
+                + (
+                    f" {' '.join([self.evaluate(argument) for argument in to_eval.arguments])}"
+                    if to_eval.arguments
+                    else ""
+                )
+                + ')"'
+            )
+        raise ValueError(f"Unexpected expression type {str(to_eval)}")
 
 
 #########################################################################################
