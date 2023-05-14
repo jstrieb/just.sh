@@ -290,10 +290,14 @@ class CompilerState:
     def __init__(self, parsed) -> None:
         self.parsed = parsed
         self.parameters: Dict[str, List[str]] = dict()
-        self.aliases: Dict[str, List[str]] = defaultdict(list)
-
         # TODO: Pre-process internal names
         self.internal_names: Dict[str, str] = dict()
+
+        # Originally, each of these helper functions were done in one or two
+        # large passes over the AST with many conditional branches. Here, we do
+        # many passes for cleaner code at the expense of looping more times over
+        # the same data. In practice, justfiles are small enough that there is a
+        # negligible speed impact.
         self.settings: Dict[str, Union[bool, None, List[str]]] = self.process_settings()
         self.variables: Dict[str, ExpressionType]
         self.exports: List[str]
@@ -307,6 +311,7 @@ class CompilerState:
             str, Dict[str, str]
         ] = self.process_platform_recipes()
         self.docstrings: Dict[str, str] = self.process_docstrings()
+        self.aliases: Dict[str, List[str]] = self.process_aliases()
 
     def process_settings(self) -> Dict[str, Union[bool, None, List[str]]]:
         """
@@ -492,14 +497,28 @@ class CompilerState:
         for item_index, item in enumerate(self.parsed):
             if isinstance(item.item, Recipe):
                 recipe = item.item
-                if "private" not in item.attributes and not recipe.name.startswith("_"):
+                if (
+                    "private" not in item.attributes.names
+                    and not recipe.name.startswith("_")
+                ):
                     # Store docstrings, but only for non-private recipes
                     previous = (
                         self.parsed[item_index - 1].item if item_index > 0 else None
                     )
                     if isinstance(previous, Comment):
                         docstrings[recipe.name] = previous.comment
+            elif isinstance(item.item, Alias):
+                alias = item.item
+                docstrings[alias.name] = f"alias for `{alias.aliased_to}`"
         return docstrings
+
+    def process_aliases(self) -> Dict[str, List[str]]:
+        aliases = defaultdict(list)
+        for item in self.parsed:
+            if isinstance(item.item, Alias):
+                alias = item.item
+                aliases[alias.aliased_to].append(alias.name)
+        return aliases
 
     def clean_name(self, to_clean: str, prefix: str = "") -> str:
         """
