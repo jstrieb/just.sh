@@ -5,7 +5,7 @@ import logging
 import os
 import stat
 import sys
-from typing import IO, Any, Callable, Dict, List, Optional, Tuple, TypeVar, Union
+from typing import IO, Any, Callable, Dict, List, Tuple, TypeVar, Union
 
 from parse import (
     Alias,
@@ -289,10 +289,10 @@ def get_function(name: str) -> str:
 class CompilerState:
     def __init__(self, parsed) -> None:
         self.parsed = parsed
-        self.platform_specific_recipes: Dict[str, Dict[str, str]] = defaultdict(dict)
         self.parameters: Dict[str, List[str]] = dict()
         self.aliases: Dict[str, List[str]] = defaultdict(list)
 
+        # TODO: Pre-process internal names
         self.internal_names: Dict[str, str] = dict()
         self.settings: Dict[str, Union[bool, None, List[str]]] = self.process_settings()
         self.variables: Dict[str, ExpressionType]
@@ -303,6 +303,9 @@ class CompilerState:
         self.recipes: List[str] = self.list_all_recipes(
             self.settings.get("allow-duplicate-recipes")
         )
+        self.platform_specific_recipes: Dict[
+            str, Dict[str, str]
+        ] = self.process_platform_recipes()
         self.docstrings: Dict[str, str] = self.process_docstrings()
 
     def process_settings(self) -> Dict[str, Union[bool, None, List[str]]]:
@@ -455,6 +458,7 @@ class CompilerState:
         for item in self.parsed:
             if isinstance(item.item, Recipe):
                 # Filter out platform-specific attributes (e.g., drop "private")
+                # Filter out platform-specific attributes (e.g., drop "private")
                 platform_attributes = {"windows", "macos", "linux", "unix"} & set(
                     item.attributes.names
                 )
@@ -467,6 +471,21 @@ class CompilerState:
 
                 recipes.append(item.item.name)
         return recipes
+
+    def process_platform_recipes(self) -> Dict[str, Dict[str, str]]:
+        platform_specific_recipes: Dict[str, Dict[str, str]] = defaultdict(dict)
+        for item in self.parsed:
+            if isinstance(item.item, Recipe):
+                recipe = item.item
+                # Filter out platform-specific attributes (e.g., drop "private")
+                platform_attributes = {"windows", "macos", "linux", "unix"} & set(
+                    item.attributes.names
+                )
+                if platform_attributes:
+                    function_name = f"{recipe.name}_{'_'.join(platform_attributes)}"
+                    for platform in platform_attributes:
+                        platform_specific_recipes[recipe.name][platform] = function_name
+        return platform_specific_recipes
 
     def process_docstrings(self) -> Dict[str, str]:
         docstrings = dict()
