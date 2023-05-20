@@ -1,5 +1,6 @@
 import argparse
 from collections import defaultdict
+import datetime
 import hashlib
 import logging
 import os
@@ -603,6 +604,31 @@ class CompilerState:
         raise ValueError(f"Unexpected expression type {str(to_eval)}")
 
 
+def _compile(compiler_state: CompilerState, outfile_path: str) -> str:
+    def header_comment(text: str) -> str:
+        border = "#" * 89
+        return f"""{border}
+{chr(10).join(pad_line(f'# {line}') for line in text.splitlines())}
+{border}
+
+"""
+
+    def autogen_comment() -> str:
+        return header_comment(
+            f"\nThis script was auto-generated from a Justfile by just.sh.\n\n"
+            f"Generated on {datetime.datetime.now().strftime('%Y-%m-%d')} "
+            f"with just.sh version {VERSION}.\n"
+            "https://github.com/jstrieb/just.sh\n\n"
+            f"Run `./{os.path.basename(outfile_path)} --dump` to recover "
+            "the original Justfile.\n\n"
+        )
+
+    return f"""#!/bin/sh
+
+{autogen_comment()}
+"""
+
+
 #########################################################################################
 # Main Function                                                                         #
 #########################################################################################
@@ -610,6 +636,7 @@ class CompilerState:
 
 def compile(justfile: str, f: IO, outfile_path: str, verbose: bool) -> None:
     compiler_state = CompilerState(justfile_parse(justfile, verbose=verbose))
+    f.write(_compile(compiler_state, outfile_path))
 
 
 def main(justfile_path, outfile_path, verbose=False):
