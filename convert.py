@@ -631,9 +631,7 @@ def _compile(compiler_state: CompilerState, outfile_path: str) -> str:
         border = "#" * 89
         return f"""{border}
 {chr(10).join(pad_line(f'# {line}') for line in text.splitlines())}
-{border}
-
-"""
+{border}"""
 
     def autogen_comment() -> str:
         return header_comment(
@@ -646,6 +644,14 @@ def _compile(compiler_state: CompilerState, outfile_path: str) -> str:
         )
 
     return f"""#!/bin/sh
+
+{autogen_comment()}
+
+if sh "set -o pipefail" > /dev/null 2>&1; then
+  set -euo pipefail
+else
+  set -eu
+fi
 
 {autogen_comment()}
 """
