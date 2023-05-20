@@ -76,7 +76,7 @@ def identity(x: T, *args, **kwargs) -> T:
 #########################################################################################
 
 just_functions = {
-    # TODO: add more
+    # TODO: Add more
     "os": r"""os() {
   case "$(uname -s | tr '[:upper:]' '[:lower:]')" in
   *darwin*)
@@ -289,8 +289,6 @@ def get_function(name: str) -> str:
 class CompilerState:
     def __init__(self, parsed) -> None:
         self.parsed = parsed
-        self.parameters: Dict[str, List[str]] = dict()
-        # TODO: Pre-process internal names
         self.internal_names: Dict[str, str] = dict()
 
         # Originally, each of these helper functions were done in one or two
@@ -298,6 +296,9 @@ class CompilerState:
         # many passes for cleaner code at the expense of looping more times over
         # the same data. In practice, justfiles are small enough that there is a
         # negligible speed impact.
+        #
+        # Note that the order in which the following functions are run matters
+        # in some cases.
         self.settings: Dict[str, Union[bool, None, List[str]]] = self.process_settings()
         self.variables: Dict[str, ExpressionType]
         self.exports: List[str]
