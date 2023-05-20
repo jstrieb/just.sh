@@ -19,6 +19,8 @@ from parse import (
     Export,
     ExpressionType,
     Function,
+    Interpolation,
+    Item,
     Neq,
     Recipe,
     RegexEq,
@@ -378,9 +380,29 @@ class CompilerState:
         # Closure over local `functions` variable
         def find_functions(ast_item) -> Any:
             """
-            Recursively walk the AST and up `functions` with any function in the
-            tree.
+            Recursively walk the AST and update `functions` with any function in
+            the tree.
             """
+            if isinstance(ast_item, Item):
+                return find_functions(ast_item.item)
+            if isinstance(ast_item, Recipe):
+                for parameter in ast_item.parameters:
+                    find_functions(parameter.value)
+                if ast_item.variadic:
+                    find_functions(ast_item.variadic.param.value)
+                for dep in ast_item.before_dependencies + ast_item.after_dependencies:
+                    for arg in dep.default_args:
+                        find_functions(arg)
+                for line in ast_item.body:
+                    for line_data in line.data:
+                        find_functions(line_data)
+                return
+            if isinstance(ast_item, Interpolation):
+                return find_functions(ast_item.expression)
+            if isinstance(ast_item, Assignment):
+                return find_functions(ast_item.value)
+            if isinstance(ast_item, Export):
+                return find_functions(ast_item.assignment)
             if isinstance(ast_item, Sum):
                 return find_functions(ast_item.sum_1), find_functions(ast_item.sum_2)
             if isinstance(ast_item, Div):
@@ -445,7 +467,7 @@ class CompilerState:
                     if ast_item.arguments
                     else None
                 )
-            raise ValueError(f"Unexpected expression type {str(ast_item)}")
+            # raise ValueError(f"Unexpected expression type {str(ast_item)}")
 
         for item in self.parsed:
             find_functions(item)
