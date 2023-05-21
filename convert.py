@@ -658,10 +658,14 @@ Run `./{os.path.basename(outfile_path)} --dump` to recover the original Justfile
     def dotenv() -> str:
         if not compiler_state.settings.get("dotenv-load"):
             return ""
-        return """TEMP_DOTENV="$(mktemp)"
+        # TODO: Handle invocation directory vs justfile directory?
+        return """
+# Source a `.env` file
+TEMP_DOTENV="$(mktemp)"
 sed 's/^/export /g' ./.env > "${TEMP_DOTENV}"
 . "${TEMP_DOTENV}"
-rm "${TEMP_DOTENV}" """
+rm "${TEMP_DOTENV}"
+"""
 
     def tmpdir() -> str:
         tmpdir_value = compiler_state.settings.get("tempdir")
@@ -683,21 +687,43 @@ DEFAULT_SHELL_ARGS='{' '.join(args)}'
 LIST_HEADING='Available recipes:\n'
 LIST_PREFIX='    '
 CHOOSER='fzf'
-SORTED='true'
-
-"""
+SORTED='true'"""
         )
 
     def color_variables() -> str:
-        return ""
+        return """
+# Display colors
+SHOW_COLOR='false'
+if [ -t 1 ]; then SHOW_COLOR='true'; fi
+NOCOLOR="$(test "${SHOW_COLOR}" = 'true' && printf "\\033[m" || echo)"
+BOLD="$(test "${SHOW_COLOR}" = 'true' && printf "\\033[1m" || echo)"
+RED="$(test "${SHOW_COLOR}" = 'true' && printf "\\033[1m\\033[31m" || echo)"
+YELLOW="$(test "${SHOW_COLOR}" = 'true' && printf "\\033[33m" || echo)"
+CYAN="$(test "${SHOW_COLOR}" = 'true' && printf "\\033[36m" || echo)"
+GREEN="$(test "${SHOW_COLOR}" = 'true' && printf "\\033[32m" || echo)"
+PINK="$(test "${SHOW_COLOR}" = 'true' && printf "\\033[35m" || echo)"
+BLUE="$(test "${SHOW_COLOR}" = 'true' && printf "\\033[34m" || echo)"
+"""
 
     def assign_variables_function() -> str:
-        return ""
+        if compiler_state.variables:
+            variable_str = "\n".join(
+                f'  {compiler_state.clean_var_name(var)}={compiler_state.evaluate(expr)} || exit "${{?}}"'
+                for var, expr in compiler_state.variables.items()
+            )
+        else:
+            variable_str = "  # No user-declared variables"
+        return f"""assign_variables() {{
+  test -z "${{HAS_RUN_assign_variables:-}}" || return 0
+
+{variable_str}
+
+  HAS_RUN_assign_variables="true"
+}}"""
 
     def variables() -> str:
         return f"""{header_comment("Variables")}
 {dotenv()}
-
 # User-overwritable variables (via CLI)
 {default_variables()}
 {color_variables()}
