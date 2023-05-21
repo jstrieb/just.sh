@@ -145,7 +145,7 @@ test2:
         # https://just.systems/man/en/chapter_24.html
         (
             """
-set shell := ["bash", "-cu"]
+set shell := ["bash", "-c", "-u"]
 
 foo:
   # this line will be run as `bash -cu 'ls */*'`
@@ -629,7 +629,6 @@ build:
         ),
         # Environment variables
         # https://just.systems/man/en/chapter_36.html
-        # TODO: Test dotenv
         (
             r"""
 export RUST_BACKTRACE := "1" 

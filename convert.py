@@ -339,6 +339,10 @@ class CompilerState:
         if settings.get("windows-shell") or settings.get("windows-powershell"):
             raise NotImplementedError("Windows not yet supported")
 
+        if settings.get("shell") and isinstance(settings.get("shell"), list):
+            if len(settings.get("shell")) <= 2:
+                raise ValueError("`shell` setting must have at least two elements.")
+
         return settings
 
     def process_variables(self) -> Tuple[Dict[str, ExpressionType], List[str]]:
@@ -635,13 +639,69 @@ def _compile(compiler_state: CompilerState, outfile_path: str) -> str:
 
     def autogen_comment() -> str:
         return header_comment(
-            f"\nThis script was auto-generated from a Justfile by just.sh.\n\n"
-            f"Generated on {datetime.datetime.now().strftime('%Y-%m-%d')} "
-            f"with just.sh version {VERSION}.\n"
-            "https://github.com/jstrieb/just.sh\n\n"
-            f"Run `./{os.path.basename(outfile_path)} --dump` to recover "
-            "the original Justfile.\n\n"
+            f"""
+This script was auto-generated from a Justfile by just.sh.
+
+Generated on {datetime.datetime.now().strftime('%Y-%m-%d')} with just.sh version {VERSION}.
+https://github.com/jstrieb/just.sh
+
+Run `./{os.path.basename(outfile_path)} --dump` to recover the original Justfile.\n\n"""
         )
+
+    def functions() -> str:
+        if not compiler_state.functions:
+            return ""
+        return f"""\n\n{header_comment("Internal functions")}
+
+{"".join(f for f in compiler_state.functions.values())}"""
+
+    def dotenv() -> str:
+        if not compiler_state.settings.get("dotenv-load"):
+            return ""
+        return """TEMP_DOTENV="$(mktemp)"
+sed 's/^/export /g' ./.env > "${TEMP_DOTENV}"
+. "${TEMP_DOTENV}"
+rm "${TEMP_DOTENV}" """
+
+    def tmpdir() -> str:
+        tmpdir_value = compiler_state.settings.get("tempdir")
+        if not tmpdir_value:
+            return ""
+        return f"TMPDIR={repr(tmpdir_value)}\n"
+
+    def default_variables() -> str:
+        shell_setting = compiler_state.settings.get("shell")
+        if shell_setting and isinstance(shell_setting, list):
+            shell, *args = shell_setting
+        else:
+            shell, *args = "sh", "-cu"
+        return (
+            tmpdir()
+            + f"""INVOCATION_DIRECTORY="$(pwd)"
+DEFAULT_SHELL='{shell}'
+DEFAULT_SHELL_ARGS='{' '.join(args)}'
+LIST_HEADING='Available recipes:\n'
+LIST_PREFIX='    '
+CHOOSER='fzf'
+SORTED='true'
+
+"""
+        )
+
+    def color_variables() -> str:
+        return ""
+
+    def assign_variables_function() -> str:
+        return ""
+
+    def variables() -> str:
+        return f"""{header_comment("Variables")}
+{dotenv()}
+
+# User-overwritable variables (via CLI)
+{default_variables()}
+{color_variables()}
+{assign_variables_function()}"""
 
     return f"""#!/bin/sh
 
@@ -652,8 +712,13 @@ if sh "set -o pipefail" > /dev/null 2>&1; then
 else
   set -eu
 fi
+{functions()}
+
+{variables()}
+
 
 {autogen_comment()}
+
 """
 
 
