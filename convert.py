@@ -40,6 +40,9 @@ VERSION = "0.0.1"
 
 T = TypeVar("T")
 
+# Escape characters are not allowed in format strings
+newline = "\n"
+
 
 #########################################################################################
 # Utility Functions                                                                     #
@@ -634,7 +637,7 @@ def _compile(compiler_state: CompilerState, outfile_path: str) -> str:
     def header_comment(text: str) -> str:
         border = "#" * 89
         return f"""{border}
-{chr(10).join(pad_line(f'# {line}') for line in text.splitlines())}
+{newline.join(pad_line(f'# {line}') for line in text.splitlines())}
 {border}"""
 
     def autogen_comment() -> str:
@@ -729,6 +732,37 @@ BLUE="$(test "${SHOW_COLOR}" = 'true' && printf "\\033[34m" || echo)"
 {color_variables()}
 {assign_variables_function()}"""
 
+    def recipe(r: Recipe, index: int) -> str:
+        return "recipe"
+
+    def comment(c: Comment) -> str:
+        logging.warning(
+            "Comments may be in unexpected places in the generated script. "
+            "They are placed relative to recipes, not variable assignments "
+            "or settings, which may be moved around."
+        )
+        return f"# {c.comment}"
+
+    def alias(a: Alias) -> str:
+        return f"""{compiler_state.clean_fun_name(a.name)}() {{
+  {compiler_state.clean_fun_name(a.aliased_to)}
+}}"""
+
+    def recipes() -> str:
+        compiled_recipes = []
+        for index, item in enumerate(compiler_state.parsed):
+            if isinstance(item.item, Recipe):
+                compiled_recipes.append(recipe(item.item, index))
+            elif isinstance(item.item, Comment):
+                compiled_recipes.append(comment(item.item))
+            elif isinstance(item.item, Alias):
+                compiled_recipes.append(alias(item.item))
+        return f"""
+{header_comment("Recipes")}
+
+{(newline * 2).join(compiled_recipes)}"""
+
+    # Main _compile output
     return f"""#!/bin/sh
 
 {autogen_comment()}
@@ -741,6 +775,8 @@ fi
 {functions()}
 
 {variables()}
+
+{recipes()}
 
 
 {autogen_comment()}
