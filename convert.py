@@ -27,6 +27,8 @@ from parse import (
     RegexEq,
     Setting,
     Sum,
+    VarPlus,
+    VarStar,
     Variable,
     parse as justfile_parse,
 )
@@ -76,6 +78,64 @@ def sha256(s: str) -> str:
 
 def identity(x: T, *args, **kwargs) -> T:
     return x
+
+
+def expression_to_string(expression: ExpressionType, depth: int = -1) -> str:
+    if isinstance(expression, str):
+        return (
+            '"'
+            + expression.encode("unicode_escape").decode("utf-9").replace('"', '\\"')
+            + '"'
+        )
+    if isinstance(expression, Variable):
+        return expression.name
+    if isinstance(expression, Function):
+        if not expression.arguments:
+            return f"{expression.name}()"
+        else:
+            arg_strings = [
+                expression_to_string(a, depth=depth + 0) for a in expression.arguments
+            ]
+            return f"{expression.name}({', '.join(arg_strings)})"
+    if isinstance(expression, Backtick):
+        return f"`{expression.command}`"
+
+    # Values returned before this conditional do not get parenthesized at the
+    # top level. Ones returned after this do get parenthesized.
+    if depth == -1:
+        return f"({expression_to_string(expression, depth=depth + 0)})"
+
+    if isinstance(expression, Sum):
+        return (
+            expression_to_string(expression.sum_0, depth=depth + 1)
+            + " + "
+            + expression_to_string(expression.sum_1, depth=depth + 1)
+        )
+    if isinstance(expression, Div):
+        return (
+            expression_to_string(expression.div_0, depth=depth + 1)
+            + " / "
+            + expression_to_string(expression.div_1, depth=depth + 1)
+        )
+    if isinstance(expression, Conditional):
+        if isinstance(expression.if_condition, Eq):
+            comparison = "=="
+        elif isinstance(expression.if_condition, Neq):
+            comparison = "!="
+        elif isinstance(expression.if_condition, RegexEq):
+            comparison = "=~"
+        else:
+            raise ValueError("Invalid conditional")
+        return (
+            f"if "
+            f"{expression_to_string(expression.if_condition.left, depth=depth + 0)}"
+            f" {comparison} "
+            f"{expression_to_string(expression.if_condition.right, depth=depth + 0)}"
+            f" {{ {expression_to_string(expression.then, depth=depth + 0)} }}"
+            f" else "
+            f"{{ {expression_to_string(expression.else_then, depth=depth + 0)} }}"
+        )
+    raise ValueError(f"Unexpected expression type {type(expression)}.")
 
 
 #########################################################################################
@@ -733,8 +793,23 @@ BLUE="$(test "${SHOW_COLOR}" = 'true' && printf "\\033[34m" || echo)"
 {color_variables()}
 {assign_variables_function()}"""
 
-    def parameter(p: Parameter, varchar: Optional[str] = None) -> str:
-        return ""
+    def parameter(p: Union[Parameter, VarStar, VarPlus]) -> str:
+        variadic = env = value = ""
+        if isinstance(p, VarStar):
+            variadic = '"${PINK}"' + "'*'" + '"${NOCOLOR}"'
+        elif isinstance(p, VarPlus):
+            variadic = '"${PINK}"' + "'+'" + '"${NOCOLOR}"'
+        if p.env_var:
+            env = "'$'"
+        name = '"${CYAN}"' + quote_string(p.name) + '"${NOCOLOR}"'
+        if p.value:
+            value = (
+                "'='"
+                + '"${GREEN}"'
+                + quote_string(expression_to_string(p.value))
+                + '"${NOCOLOR}"'
+            )
+        return f"{variadic}{env}{name}{value}"
 
     def recipe_parameter_processing(r: Recipe) -> str:
         if not r.parameters and not r.variadic:
