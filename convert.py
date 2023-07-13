@@ -381,6 +381,7 @@ class CompilerState:
         ] = self.process_platform_recipes()
         self.docstrings: Dict[str, str] = self.process_docstrings()
         self.aliases: Dict[str, List[str]] = self.process_aliases()
+        self.process_recipe_parameters()
 
     def process_settings(self) -> Dict[str, Union[bool, None, List[str]]]:
         """
@@ -693,6 +694,25 @@ class CompilerState:
                 + ')"'
             )
         raise ValueError(f"Unexpected expression type {str(to_eval)}")
+
+    def process_recipe_parameters(self):
+        seen_parameters: Dict[str, Any] = dict()
+        for item in self.parsed:
+            if isinstance(item.item, Recipe):
+                recipe = item.item
+                recipe_params = [*recipe.parameters]
+                if recipe.variadic:
+                    recipe_params.append(recipe.variadic.param)
+                if (
+                    recipe.name in seen_parameters
+                    and seen_parameters[recipe.name] != recipe_params
+                ):
+                    logging.warning(
+                        f"Recipe {recipe.name} has different parameters than other versions of the "
+                        f"same recipe. Only the parameters for the last version of the recipe in "
+                        f"the file will be listed."
+                    )
+                seen_parameters[recipe.name] = recipe_params
 
 
 def _compile(compiler_state: CompilerState, outfile_path: str) -> str:
