@@ -6,7 +6,7 @@ import logging
 import os
 import stat
 import sys
-from typing import IO, Any, Callable, Dict, List, Tuple, TypeVar, Union
+from typing import IO, Any, Callable, Dict, List, Optional, Set, Tuple, TypeVar, Union
 
 from parse import (
     Alias,
@@ -22,6 +22,7 @@ from parse import (
     Interpolation,
     Item,
     Neq,
+    Parameter,
     Recipe,
     RegexEq,
     Setting,
@@ -732,8 +733,61 @@ BLUE="$(test "${SHOW_COLOR}" = 'true' && printf "\\033[34m" || echo)"
 {color_variables()}
 {assign_variables_function()}"""
 
-    def recipe(r: Recipe, index: int) -> str:
-        return "recipe"
+    def parameter(p: Parameter, varchar: Optional[str] = None) -> str:
+        return ""
+
+    def recipe_parameter_processing(r: Recipe) -> str:
+        if not r.parameters and not r.variadic:
+            return ""
+        # TODO
+        return "\n\n  "
+
+    def recipe_before_dependencies(r: Recipe) -> str:
+        if not r.before_dependencies:
+            return ""
+        # TODO
+        return "\n\n  "
+
+    def recipe_preamble(r: Recipe) -> str:
+        return f"""  test -z "${{{compiler_state.clean_name("HAS_RUN_" + r.name)}:-}}" \\
+    || test "${{{compiler_state.clean_name("FORCE_" + r.name)}:-}}" = "true" \\
+    || return 0
+{recipe_parameter_processing(r)}{recipe_before_dependencies(r)}"""
+
+    def recipe_tempfile_body() -> str:
+        return ""
+
+    def recipe_regular_body() -> str:
+        return ""
+
+    def recipe_epilogue() -> str:
+        return ""
+
+    def recipe(r: Recipe, platform_attributes: Set[str], index: int) -> str:
+        function_name = (
+            f"{r.name}_{'_'.join(platform_attributes)}"
+            if platform_attributes
+            else r.name
+        )
+        if (
+            len(r.body) > 0
+            and len(r.body[0].data) > 0
+            and isinstance(r.body[0].data[0], str)
+            and r.body[0].data[0].startswith("#!")
+        ):
+            recipe_body = recipe_tempfile_body()
+        else:
+            recipe_body = recipe_regular_body()
+        return f"""{compiler_state.clean_fun_name(function_name)}() {{
+  # Recipe setup and pre-recipe dependencies
+{recipe_preamble(r)}
+
+  # Recipe body
+{recipe_body}
+
+  # Post-recipe dependencies and teardown
+{recipe_epilogue()}
+}}"""
 
     def comment(c: Comment) -> str:
         logging.warning(
@@ -752,7 +806,11 @@ BLUE="$(test "${SHOW_COLOR}" = 'true' && printf "\\033[34m" || echo)"
         compiled_recipes = []
         for index, item in enumerate(compiler_state.parsed):
             if isinstance(item.item, Recipe):
-                compiled_recipes.append(recipe(item.item, index))
+                # Filter out platform-specific attributes (e.g., drop "private")
+                platform_attributes = {"windows", "macos", "linux", "unix"} & set(
+                    item.attributes.names
+                )
+                compiled_recipes.append(recipe(item.item, platform_attributes, index))
             elif isinstance(item.item, Comment):
                 compiled_recipes.append(comment(item.item))
             elif isinstance(item.item, Alias):

@@ -170,7 +170,7 @@ class Recipe:
     def __post_init__(self):
         try:
             self.num_non_eq_params = next(
-                i for i, p in enumerate(self.parameters) if p.value
+                i for i, p in enumerate(self.parameters) if p.value is not None
             )
         except StopIteration:
             self.num_non_eq_params = len(self.parameters)
@@ -185,6 +185,7 @@ class Recipe:
                 "Variadic following parameters with default values must have "
                 f'default values in "{self.name}"'
             )
+        # FIXME: Bump eq_params variables based on variadic?
 
 
 @dataclass
