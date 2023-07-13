@@ -14,6 +14,7 @@ from parse import (
     Backtick,
     Comment,
     Conditional,
+    Dependency,
     Div,
     Eq,
     Export,
@@ -817,17 +818,33 @@ BLUE="$(test "${SHOW_COLOR}" = 'true' && printf "\\033[34m" || echo)"
         # TODO
         return "\n\n  "
 
+    def before_dependency(r: Recipe, d: Dependency) -> str:
+        quoted_args = " ".join(compiler_state.evaluate(arg) for arg in d.default_args)
+        if quoted_args:
+            quoted_args = " " + quoted_args
+        force_recipe = compiler_state.clean_name("FORCE_" + r.name)
+        force_dep = compiler_state.clean_name("FORCE_" + d.name)
+        return f"""  if [ "${{{force_recipe}:-}}" = "true" ]; then
+    {force_dep}="true"
+  fi
+  {compiler_state.clean_fun_name(d.name)}{quoted_args}
+  if [ "${{{force_recipe}:-}}" = "true" ]; then
+    {force_dep}=
+  fi"""
+
     def recipe_before_dependencies(r: Recipe) -> str:
         if not r.before_dependencies:
             return ""
-        # TODO
-        return "\n\n  "
+        return f"\n\n{newline.join(before_dependency(r, d) for d in r.before_dependencies)}"
 
     def recipe_preamble(r: Recipe) -> str:
-        return f"""  test -z "${{{compiler_state.clean_name("HAS_RUN_" + r.name)}:-}}" \\
+        return (
+            f"""  test -z "${{{compiler_state.clean_name("HAS_RUN_" + r.name)}:-}}" \\
     || test "${{{compiler_state.clean_name("FORCE_" + r.name)}:-}}" = "true" \\
-    || return 0
-{recipe_parameter_processing(r)}{recipe_before_dependencies(r)}"""
+    || return 0"""
+            + recipe_parameter_processing(r)
+            + recipe_before_dependencies(r)
+        )
 
     def recipe_tempfile_body() -> str:
         return ""
@@ -838,7 +855,9 @@ BLUE="$(test "${SHOW_COLOR}" = 'true' && printf "\\033[34m" || echo)"
     def recipe_epilogue() -> str:
         return ""
 
-    def recipe(r: Recipe, platform_attributes: Set[str], index: int) -> str:
+    def recipe(r: Recipe, attributes: Set[str], index: int) -> str:
+        # Filter out platform-specific attributes (e.g., drop "private")
+        platform_attributes = {"windows", "macos", "linux", "unix"} & attributes
         function_name = (
             f"{r.name}_{'_'.join(platform_attributes)}"
             if platform_attributes
@@ -853,9 +872,13 @@ BLUE="$(test "${SHOW_COLOR}" = 'true' && printf "\\033[34m" || echo)"
             recipe_body = recipe_tempfile_body()
         else:
             recipe_body = recipe_regular_body()
+        change_workdir = ""
+        if "no-cd" not in attributes:
+            change_workdir = f'''\n\n  OLD_WD="$(pwd)"
+  cd "${{INVOCATION_DIRECTORY}}"'''
         return f"""{compiler_state.clean_fun_name(function_name)}() {{
   # Recipe setup and pre-recipe dependencies
-{recipe_preamble(r)}
+{recipe_preamble(r)}{change_workdir}
 
   # Recipe body
 {recipe_body}
@@ -881,11 +904,9 @@ BLUE="$(test "${SHOW_COLOR}" = 'true' && printf "\\033[34m" || echo)"
         compiled_recipes = []
         for index, item in enumerate(compiler_state.parsed):
             if isinstance(item.item, Recipe):
-                # Filter out platform-specific attributes (e.g., drop "private")
-                platform_attributes = {"windows", "macos", "linux", "unix"} & set(
-                    item.attributes.names
+                compiled_recipes.append(
+                    recipe(item.item, set(item.attributes.names), index)
                 )
-                compiled_recipes.append(recipe(item.item, platform_attributes, index))
             elif isinstance(item.item, Comment):
                 compiled_recipes.append(comment(item.item))
             elif isinstance(item.item, Alias):
@@ -895,7 +916,9 @@ BLUE="$(test "${SHOW_COLOR}" = 'true' && printf "\\033[34m" || echo)"
 
 {(newline * 2).join(compiled_recipes)}"""
 
-    # Main _compile output
+    ###
+    # End of helper functions – main _compile output
+    ###
     return f"""#!/bin/sh
 
 {autogen_comment()}
