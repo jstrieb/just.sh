@@ -818,8 +818,10 @@ BLUE="$(test "${SHOW_COLOR}" = 'true' && printf "\\033[34m" || echo)"
         variadic = env = value = ""
         if isinstance(p, VarStar):
             variadic = '"${PINK}"' + "'*'" + '"${NOCOLOR}"'
+            p = p.param
         elif isinstance(p, VarPlus):
             variadic = '"${PINK}"' + "'+'" + '"${NOCOLOR}"'
+            p = p.param
         if p.env_var:
             env = "'$'"
         name = '"${CYAN}"' + quote_string(p.name) + '"${NOCOLOR}"'
@@ -835,8 +837,54 @@ BLUE="$(test "${SHOW_COLOR}" = 'true' && printf "\\033[34m" || echo)"
     def recipe_parameter_processing(r: Recipe) -> str:
         if not r.parameters and not r.variadic:
             return ""
-        # TODO
-        return "\n\n  "
+        at_least = ""
+        if r.variadic or r.num_eq_params > 0:
+            at_least = "at least "
+        min_args = r.num_non_eq_params
+        if isinstance(r.variadic, VarPlus) and r.variadic.param.value is None:
+            min_args += 1
+        handle_min_args = ""
+        if min_args > 0:
+            param_names = [parameter(p) for p in r.parameters]
+            if r.variadic:
+                param_names.append(parameter(r.variadic))
+            handle_min_args = f"""  if [ "${{#}}" -lt {min_args} ]; then
+    (
+      echo_error 'Recipe `{r.name}`'" got ${{#}} arguments but takes {at_least}{min_args}"
+      echo "${{BOLD}}usage:${{NOCOLOR}}"
+      echo "    ${{0}} "'{r.name} '{"' '".join(param_names)}
+    ) >&2
+    exit 1
+  fi"""
+        param_assignments = []
+        for i, param in enumerate(r.parameters):
+            param_name = compiler_state.clean_var_name(param.name)
+            param_assignments.append(f'  {param_name}="${{{i + 1}:-}}"')
+            if param.value is not None:
+                param_assignments.append(
+                    f"""  if [ "${{#}}" -lt {i + 1} ]; then
+    {param_name}={compiler_state.evaluate(param.value)}
+  fi"""
+                )
+        if r.variadic:
+            param = r.variadic.param
+            param_name = compiler_state.clean_var_name(param.name)
+            if r.parameters:
+                param_assignments.append(
+                    f"""  if [ "${{#}}" -ge {len(r.parameters)} ]; then
+    shift {len(r.parameters)}
+  elif [ "${{#}}" -gt 0 ]; then
+    shift "${{#}}"
+  fi"""
+                )
+            if param.value is not None:
+                param_assignments.append(
+                    f"""  if [ "${{#}}" -lt 1]; then
+    set -- {compiler_state.evaluate(param.value)}
+  fi"""
+                )
+            param_assignments.append(f'  {param_name}="${{*:-}}"')
+        return f"\n\n{handle_min_args}{newline if param_assignments else ''}{newline.join(param_assignments)}"
 
     def before_dependency(r: Recipe, d: Dependency) -> str:
         quoted_args = " ".join(compiler_state.evaluate(arg) for arg in d.default_args)
