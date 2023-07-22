@@ -6,7 +6,7 @@ import logging
 import os
 import stat
 import sys
-from typing import IO, Any, Callable, Dict, List, Optional, Set, Tuple, TypeVar, Union
+from typing import IO, Any, Callable, Dict, List, Set, Tuple, TypeVar, Union, cast
 
 from parse import (
     Alias,
@@ -108,15 +108,15 @@ def expression_to_string(expression: ExpressionType, depth: int = -1) -> str:
 
     if isinstance(expression, Sum):
         return (
-            expression_to_string(expression.sum_0, depth=depth + 1)
+            expression_to_string(expression.sum_1, depth=depth + 1)
             + " + "
-            + expression_to_string(expression.sum_1, depth=depth + 1)
+            + expression_to_string(expression.sum_2, depth=depth + 1)
         )
     if isinstance(expression, Div):
         return (
-            expression_to_string(expression.div_0, depth=depth + 1)
+            expression_to_string(expression.div_1, depth=depth + 1)
             + " / "
-            + expression_to_string(expression.div_1, depth=depth + 1)
+            + expression_to_string(expression.div_2, depth=depth + 1)
         )
     if isinstance(expression, Conditional):
         if isinstance(expression.if_condition, Eq):
@@ -406,7 +406,7 @@ class CompilerState:
             raise NotImplementedError("Windows not yet supported")
 
         if settings.get("shell") and isinstance(settings.get("shell"), list):
-            if len(settings.get("shell")) <= 2:
+            if len(cast(List[str], settings.get("shell"))) <= 2:
                 raise ValueError("`shell` setting must have at least two elements.")
 
         return settings

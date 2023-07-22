@@ -15,4 +15,4 @@ alias lint := lint-python
 
 lint-python:
     black .
-    mypy .
+    mypy --check-untyped-defs .
