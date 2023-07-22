@@ -4,6 +4,7 @@ import datetime
 import hashlib
 import logging
 import os
+import re
 import stat
 import sys
 from typing import IO, Any, Callable, Dict, List, Set, Tuple, TypeVar, Union, cast
@@ -919,6 +920,11 @@ BLUE="$(test "${SHOW_COLOR}" = 'true' && printf "\\033[34m" || echo)"
         )
 
     def interpolated_variables(r: Recipe) -> str:
+        """
+        Store interpolations as intermediate variables to handle errors that may
+        occur when evaluating. If they are directly interpolated inline, the
+        shell has no mechanism to handle and display errors.
+        """
         interpolations = []
         i = 1
         for line in r.body:
@@ -931,13 +937,47 @@ BLUE="$(test "${SHOW_COLOR}" = 'true' && printf "\\033[34m" || echo)"
                     i += 1
         if not interpolations:
             return ""
-        return "\n".join(interpolations) + "\n"
+        return "\n" + "\n".join(interpolations)
+
+    def recipe_lines(r: Recipe) -> str:
+        recipe_lines = []
+        non_interp_data: List[str] = []
+
+        # Closure over recipe_lines and non_interp_data
+        def reset_non_interp_data():
+            if non_interp_data:
+                recipe_lines.append(quote_string("".join(non_interp_data)))
+                non_interp_data.clear()
+
+        interp_var_counter = 1
+        for i, line in enumerate(r.body):
+            if i > 0:
+                non_interp_data.append("\n")
+            for part in line.data:
+                if isinstance(part, str):
+                    non_interp_data.append(part)
+                elif isinstance(part, Interpolation):
+                    reset_non_interp_data()
+                    recipe_lines.append(
+                        quote_string(f"${{INTERP_{interp_var_counter}}}", quote='"')
+                    )
+                    interp_var_counter += 1
+        reset_non_interp_data()
+        return "".join(recipe_lines)
 
     def recipe_tempfile_body(r: Recipe) -> str:
+        cat_recipe = ""
+        if not r.echo:
+            cat_recipe = '\n  cat "${TEMPFILE}" >&2'
         return f"""  TEMPFILE="$(mktemp)"
   touch "${{TEMPFILE}}"
-  chmod +x "${{TEMPFILE}}"
-{interpolated_variables(r)}"""
+  chmod +x "${{TEMPFILE}}"{
+    interpolated_variables(r)
+  }
+  echo {recipe_lines(r)} > "${{TEMPFILE}}"{
+    cat_recipe
+  }
+"""
 
     def recipe_regular_body(r: Recipe) -> str:
         return ""
