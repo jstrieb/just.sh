@@ -888,12 +888,7 @@ BLUE="$(test "${SHOW_COLOR}" = 'true' && printf "\\033[34m" || echo)"
     def recipe_parameter_processing(r: Recipe) -> str:
         if not r.parameters and not r.variadic:
             return ""
-        return (
-            "\n\n"
-            + handle_min_args()
-            + ("\n" if param_assignments else "")
-            + param_assignments()
-        )
+        return "\n\n" + handle_min_args(r) + param_assignments(r)
 
     def before_dependency(r: Recipe, d: Dependency) -> str:
         quoted_args = " ".join(compiler_state.evaluate(arg) for arg in d.default_args)
@@ -923,8 +918,26 @@ BLUE="$(test "${SHOW_COLOR}" = 'true' && printf "\\033[34m" || echo)"
             + recipe_before_dependencies(r)
         )
 
+    def interpolated_variables(r: Recipe) -> str:
+        interpolations = []
+        i = 1
+        for line in r.body:
+            for part in line.data:
+                if isinstance(part, Interpolation):
+                    exp = compiler_state.evaluate(part.expression)
+                    interpolations.append(
+                        f"  INTERP_{i}={exp} || recipe_error '{r.name}' \"${{LINENO:-}}\""
+                    )
+                    i += 1
+        if not interpolations:
+            return ""
+        return "\n".join(interpolations) + "\n"
+
     def recipe_tempfile_body(r: Recipe) -> str:
-        return ""
+        return f"""  TEMPFILE="$(mktemp)"
+  touch "${{TEMPFILE}}"
+  chmod +x "${{TEMPFILE}}"
+{interpolated_variables(r)}"""
 
     def recipe_regular_body(r: Recipe) -> str:
         return ""
