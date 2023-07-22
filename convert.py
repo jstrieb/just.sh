@@ -57,15 +57,11 @@ newline = "\n"
 def quote_string(instring: str, quote: str = "'") -> str:
     if quote != "'" and quote != '"':
         raise ValueError("Expecting single or double quotes!")
-    return (
-        quote
-        + (
-            instring.replace("'", "'\"'\"'")
-            if quote == "'"
-            else instring.replace('"', '"\'"\'"')
-        )
-        + quote
-    )
+    if quote == "'":
+        replaced = instring.replace("'", "'\"'\"'")
+    else:
+        replaced = instring.replace('"', '"\'"\'"')
+    return quote + replaced + quote
 
 
 def pad_line(line, terminator=" #", line_length=89, ignore_overflow=False):
@@ -82,11 +78,11 @@ def identity(x: T, *args, **kwargs) -> T:
     return x
 
 
-def expression_to_string(expression: ExpressionType, depth: int = -1) -> str:
+def expression_to_string(expression: ExpressionType, depth: int = 0) -> str:
     if isinstance(expression, str):
         return (
             '"'
-            + expression.encode("unicode_escape").decode("utf-9").replace('"', '\\"')
+            + expression.encode("unicode_escape").decode("utf-8").replace('"', '\\"')
             + '"'
         )
     if isinstance(expression, Variable):
@@ -96,7 +92,7 @@ def expression_to_string(expression: ExpressionType, depth: int = -1) -> str:
             return f"{expression.name}()"
         else:
             arg_strings = [
-                expression_to_string(a, depth=depth + 0) for a in expression.arguments
+                expression_to_string(a, depth=depth + 1) for a in expression.arguments
             ]
             return f"{expression.name}({', '.join(arg_strings)})"
     if isinstance(expression, Backtick):
@@ -104,8 +100,8 @@ def expression_to_string(expression: ExpressionType, depth: int = -1) -> str:
 
     # Values returned before this conditional do not get parenthesized at the
     # top level. Ones returned after this do get parenthesized.
-    if depth == -1:
-        return f"({expression_to_string(expression, depth=depth + 0)})"
+    if depth == 0:
+        return f"({expression_to_string(expression, depth=depth + 1)})"
 
     if isinstance(expression, Sum):
         return (
@@ -130,12 +126,12 @@ def expression_to_string(expression: ExpressionType, depth: int = -1) -> str:
             raise ValueError("Invalid conditional")
         return (
             f"if "
-            f"{expression_to_string(expression.if_condition.left, depth=depth + 0)}"
+            f"{expression_to_string(expression.if_condition.left, depth=depth + 1)}"
             f" {comparison} "
-            f"{expression_to_string(expression.if_condition.right, depth=depth + 0)}"
-            f" {{ {expression_to_string(expression.then, depth=depth + 0)} }}"
+            f"{expression_to_string(expression.if_condition.right, depth=depth + 1)}"
+            f" {{ {expression_to_string(expression.then, depth=depth + 1)} }}"
             f" else "
-            f"{{ {expression_to_string(expression.else_then, depth=depth + 0)} }}"
+            f"{{ {expression_to_string(expression.else_then, depth=depth + 1)} }}"
         )
     raise ValueError(f"Unexpected expression type {type(expression)}.")
 
@@ -406,9 +402,12 @@ class CompilerState:
         if settings.get("windows-shell") or settings.get("windows-powershell"):
             raise NotImplementedError("Windows not yet supported")
 
-        if settings.get("shell") and isinstance(settings.get("shell"), list):
-            if len(cast(List[str], settings.get("shell"))) <= 2:
-                raise ValueError("`shell` setting must have at least two elements.")
+        if (
+            settings.get("shell")
+            and isinstance(settings.get("shell"), list)
+            and len(cast(List[str], settings.get("shell"))) <= 2
+        ):
+            raise ValueError("`shell` setting must have at least two elements.")
 
         return settings
 
@@ -684,15 +683,10 @@ class CompilerState:
             return quote_function(f"$({conditional_function_name})", quote='"')
         if isinstance(to_eval, Function):
             conditional_function_name = to_eval.name
-            return (
-                f'"$({self.clean_name(conditional_function_name)}'
-                + (
-                    f" {' '.join([self.evaluate(argument) for argument in to_eval.arguments])}"
-                    if to_eval.arguments
-                    else ""
-                )
-                + ')"'
-            )
+            args = ""
+            if to_eval.arguments:
+                args = f" {' '.join([self.evaluate(argument) for argument in to_eval.arguments])}"
+            return f'"$({self.clean_name(conditional_function_name)}' + args + ')"'
         raise ValueError(f"Unexpected expression type {str(to_eval)}")
 
     def process_recipe_parameters(self):
@@ -793,7 +787,11 @@ BLUE="$(test "${SHOW_COLOR}" = 'true' && printf "\\033[34m" || echo)"
     def assign_variables_function() -> str:
         if compiler_state.variables:
             variable_str = "\n".join(
-                f'  {compiler_state.clean_var_name(var)}={compiler_state.evaluate(expr)} || exit "${{?}}"'
+                f'''  {
+                    compiler_state.clean_var_name(var)
+                }={
+                    compiler_state.evaluate(expr)
+                } || exit "${{?}}"'''
                 for var, expr in compiler_state.variables.items()
             )
         else:
@@ -911,13 +909,13 @@ BLUE="$(test "${SHOW_COLOR}" = 'true' && printf "\\033[34m" || echo)"
         return f"\n\n{newline.join(before_dependency(r, d) for d in r.before_dependencies)}"
 
     def recipe_preamble(r: Recipe) -> str:
-        return (
-            f"""  test -z "${{{compiler_state.clean_name("HAS_RUN_" + r.name)}:-}}" \\
+        return f"""  test -z "${{{compiler_state.clean_name("HAS_RUN_" + r.name)}:-}}" \\
     || test "${{{compiler_state.clean_name("FORCE_" + r.name)}:-}}" = "true" \\
-    || return 0"""
-            + recipe_parameter_processing(r)
-            + recipe_before_dependencies(r)
-        )
+    || return 0{
+        recipe_parameter_processing(r)
+    }{
+        recipe_before_dependencies(r)
+    }"""
 
     def interpolated_variables(r: Recipe) -> str:
         """
@@ -965,19 +963,62 @@ BLUE="$(test "${SHOW_COLOR}" = 'true' && printf "\\033[34m" || echo)"
         reset_non_interp_data()
         return "".join(recipe_lines)
 
-    def recipe_tempfile_body(r: Recipe) -> str:
+    def export_variables(r: Recipe) -> str:
+        vars = compiler_state.exports
+        if compiler_state.settings.get("export"):
+            vars += list(compiler_state.variables.keys())
+        for param in r.parameters:
+            if param.env_var or compiler_state.settings.get("export"):
+                vars.append(param.name)
+        if r.variadic and (
+            r.variadic.param.env_var or compiler_state.settings.get("export")
+        ):
+            vars.append(r.variadic.param.name)
+
+        if not vars:
+            return ""
+
+        lines = ["\\"]
+        for var in vars:
+            lines.append(
+                f"""    "{
+                    compiler_state.clean_name(var)
+                }=${{{
+                    compiler_state.clean_var_name(var)
+                }}}" \\"""
+            )
+        lines.append("    ")
+
+        return "\n".join(lines)
+
+    def recipe_tempfile_body(r: Recipe, attributes: Set[str]) -> str:
         cat_recipe = ""
         if not r.echo:
             cat_recipe = '\n  cat "${TEMPFILE}" >&2'
+
+        positional_arguments = []
+        if compiler_state.settings.get("positional-arguments"):
+            for param in r.parameters:
+                positional_arguments.append(
+                    f'"${{{compiler_state.clean_var_name(param.name)}}}"'
+                )
+            if r.variadic:
+                positional_arguments.append('"${@}"')
+
+        exit_message = ""
+        if "no-exit-message" not in attributes:
+            exit_message = f'\\\n    || recipe_error "{r.name}"'
+
         return f"""  TEMPFILE="$(mktemp)"
   touch "${{TEMPFILE}}"
   chmod +x "${{TEMPFILE}}"{
-    interpolated_variables(r)
+  interpolated_variables(r)
   }
   echo {recipe_lines(r)} > "${{TEMPFILE}}"{
-    cat_recipe
+  cat_recipe
   }
-"""
+  env {export_variables(r)}"${{TEMPFILE}}" {" ".join(positional_arguments)} {exit_message}
+  rm "${{TEMPFILE}}" """
 
     def recipe_regular_body(r: Recipe) -> str:
         return ""
@@ -999,7 +1040,7 @@ BLUE="$(test "${SHOW_COLOR}" = 'true' && printf "\\033[34m" || echo)"
             and isinstance(r.body[0].data[0], str)
             and r.body[0].data[0].startswith("#!")
         ):
-            recipe_body = recipe_tempfile_body(r)
+            recipe_body = recipe_tempfile_body(r, attributes)
         else:
             recipe_body = recipe_regular_body(r)
         change_workdir = ""
@@ -1008,7 +1049,9 @@ BLUE="$(test "${SHOW_COLOR}" = 'true' && printf "\\033[34m" || echo)"
   cd "${{INVOCATION_DIRECTORY}}"'''
         return f"""{compiler_state.clean_fun_name(function_name)}() {{
   # Recipe setup and pre-recipe dependencies
-{recipe_preamble(r)}{change_workdir}
+{recipe_preamble(r)}{
+change_workdir
+}
 
   # Recipe body
 {recipe_body}
