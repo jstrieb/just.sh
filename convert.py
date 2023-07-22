@@ -557,7 +557,6 @@ class CompilerState:
         for item in self.parsed:
             if isinstance(item.item, Recipe):
                 # Filter out platform-specific attributes (e.g., drop "private")
-                # Filter out platform-specific attributes (e.g., drop "private")
                 platform_attributes = {"windows", "macos", "linux", "unix"} & set(
                     item.attributes.names
                 )
@@ -567,7 +566,6 @@ class CompilerState:
                     and not platform_attributes
                 ):
                     raise ValueError("No duplicate recipes!")
-
                 recipes.append(item.item.name)
         return recipes
 
@@ -596,9 +594,10 @@ class CompilerState:
                     and not recipe.name.startswith("_")
                 ):
                     # Store docstrings, but only for non-private recipes
-                    previous = (
-                        self.parsed[item_index - 1].item if item_index > 0 else None
-                    )
+                    if item_index > 0:
+                        previous = self.parsed[item_index - 1].item
+                    else:
+                        previous = None
                     if isinstance(previous, Comment):
                         docstrings[recipe.name] = previous.comment
             elif isinstance(item.item, Alias):
@@ -834,21 +833,19 @@ BLUE="$(test "${SHOW_COLOR}" = 'true' && printf "\\033[34m" || echo)"
             )
         return f"{variadic}{env}{name}{value}"
 
-    def recipe_parameter_processing(r: Recipe) -> str:
-        if not r.parameters and not r.variadic:
-            return ""
+    def handle_min_args(r: Recipe) -> str:
         at_least = ""
         if r.variadic or r.num_eq_params > 0:
             at_least = "at least "
         min_args = r.num_non_eq_params
         if isinstance(r.variadic, VarPlus) and r.variadic.param.value is None:
             min_args += 1
-        handle_min_args = ""
-        if min_args > 0:
-            param_names = [parameter(p) for p in r.parameters]
-            if r.variadic:
-                param_names.append(parameter(r.variadic))
-            handle_min_args = f"""  if [ "${{#}}" -lt {min_args} ]; then
+        if min_args == 0:
+            return ""
+        param_names = [parameter(p) for p in r.parameters]
+        if r.variadic:
+            param_names.append(parameter(r.variadic))
+        return f"""  if [ "${{#}}" -lt {min_args} ]; then
     (
       echo_error 'Recipe `{r.name}`'" got ${{#}} arguments but takes {at_least}{min_args}"
       echo "${{BOLD}}usage:${{NOCOLOR}}"
@@ -856,12 +853,14 @@ BLUE="$(test "${SHOW_COLOR}" = 'true' && printf "\\033[34m" || echo)"
     ) >&2
     exit 1
   fi"""
-        param_assignments = []
+
+    def param_assignments(r: Recipe) -> str:
+        assignments = []
         for i, param in enumerate(r.parameters):
             param_name = compiler_state.clean_var_name(param.name)
-            param_assignments.append(f'  {param_name}="${{{i + 1}:-}}"')
+            assignments.append(f'  {param_name}="${{{i + 1}:-}}"')
             if param.value is not None:
-                param_assignments.append(
+                assignments.append(
                     f"""  if [ "${{#}}" -lt {i + 1} ]; then
     {param_name}={compiler_state.evaluate(param.value)}
   fi"""
@@ -870,7 +869,7 @@ BLUE="$(test "${SHOW_COLOR}" = 'true' && printf "\\033[34m" || echo)"
             param = r.variadic.param
             param_name = compiler_state.clean_var_name(param.name)
             if r.parameters:
-                param_assignments.append(
+                assignments.append(
                     f"""  if [ "${{#}}" -ge {len(r.parameters)} ]; then
     shift {len(r.parameters)}
   elif [ "${{#}}" -gt 0 ]; then
@@ -878,13 +877,23 @@ BLUE="$(test "${SHOW_COLOR}" = 'true' && printf "\\033[34m" || echo)"
   fi"""
                 )
             if param.value is not None:
-                param_assignments.append(
+                assignments.append(
                     f"""  if [ "${{#}}" -lt 1]; then
     set -- {compiler_state.evaluate(param.value)}
   fi"""
                 )
-            param_assignments.append(f'  {param_name}="${{*:-}}"')
-        return f"\n\n{handle_min_args}{newline if param_assignments else ''}{newline.join(param_assignments)}"
+            assignments.append(f'  {param_name}="${{*:-}}"')
+        return "\n".join(assignments)
+
+    def recipe_parameter_processing(r: Recipe) -> str:
+        if not r.parameters and not r.variadic:
+            return ""
+        return (
+            "\n\n"
+            + handle_min_args()
+            + ("\n" if param_assignments else "")
+            + param_assignments()
+        )
 
     def before_dependency(r: Recipe, d: Dependency) -> str:
         quoted_args = " ".join(compiler_state.evaluate(arg) for arg in d.default_args)
@@ -914,13 +923,13 @@ BLUE="$(test "${SHOW_COLOR}" = 'true' && printf "\\033[34m" || echo)"
             + recipe_before_dependencies(r)
         )
 
-    def recipe_tempfile_body() -> str:
+    def recipe_tempfile_body(r: Recipe) -> str:
         return ""
 
-    def recipe_regular_body() -> str:
+    def recipe_regular_body(r: Recipe) -> str:
         return ""
 
-    def recipe_epilogue() -> str:
+    def recipe_epilogue(r: Recipe) -> str:
         return ""
 
     def recipe(r: Recipe, attributes: Set[str], index: int) -> str:
@@ -937,9 +946,9 @@ BLUE="$(test "${SHOW_COLOR}" = 'true' && printf "\\033[34m" || echo)"
             and isinstance(r.body[0].data[0], str)
             and r.body[0].data[0].startswith("#!")
         ):
-            recipe_body = recipe_tempfile_body()
+            recipe_body = recipe_tempfile_body(r)
         else:
-            recipe_body = recipe_regular_body()
+            recipe_body = recipe_regular_body(r)
         change_workdir = ""
         if "no-cd" not in attributes:
             change_workdir = f'''\n\n  OLD_WD="$(pwd)"
@@ -952,7 +961,7 @@ BLUE="$(test "${SHOW_COLOR}" = 'true' && printf "\\033[34m" || echo)"
 {recipe_body}
 
   # Post-recipe dependencies and teardown
-{recipe_epilogue()}
+{recipe_epilogue(r)}
 }}"""
 
     def comment(c: Comment) -> str:
