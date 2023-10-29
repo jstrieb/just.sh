@@ -1190,6 +1190,34 @@ change_workdir
   {compiler_state.clean_fun_name(a.aliased_to)}
 }}"""
 
+    def platform_dispatchers() -> List[str]:
+        dispatchers = []
+        for (
+            recipe_name,
+            platform_functions,
+        ) in compiler_state.platform_specific_recipes.items():
+            conditional_lines = []
+            for i, (platform, function_name) in enumerate(platform_functions.items()):
+                os_helper = "os_family" if platform == "unix" else "os"
+                conditional = "elif"
+                if i == 0:
+                    conditional = "if"
+                conditional_lines.append(
+                    f"  {conditional} [ \"$({os_helper})\" = '{platform}' ]; then"
+                )
+                conditional_lines.append(
+                    f"    {compiler_state.clean_fun_name(function_name)}"
+                )
+            dispatchers.append(
+                f"""{compiler_state.clean_fun_name(recipe_name)}() {{
+{newline.join(conditional_lines)}
+  else
+    echo_error \"Justfile does not contain recipe \"'`{recipe_name}`.'
+  fi
+}}"""
+            )
+        return dispatchers
+
     def recipes() -> str:
         compiled_recipes = []
         for index, item in enumerate(compiler_state.parsed):
@@ -1201,6 +1229,7 @@ change_workdir
                 compiled_recipes.append(comment(item.item))
             elif isinstance(item.item, Alias):
                 compiled_recipes.append(alias(item.item))
+        compiled_recipes.extend(platform_dispatchers())
         return f"""
 {header_comment("Recipes")}
 
