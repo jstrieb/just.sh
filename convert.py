@@ -23,6 +23,7 @@ from parse import (
     Function,
     Interpolation,
     Item,
+    Line,
     Neq,
     Parameter,
     Recipe,
@@ -917,7 +918,7 @@ BLUE="$(test "${SHOW_COLOR}" = 'true' && printf "\\033[34m" || echo)"
         recipe_before_dependencies(r)
     }"""
 
-    def interpolated_variables(r: Recipe) -> str:
+    def tempfile_interpolated_variables(r: Recipe) -> str:
         """
         Store interpolations as intermediate variables to handle errors that may
         occur when evaluating. If they are directly interpolated inline, the
@@ -937,11 +938,11 @@ BLUE="$(test "${SHOW_COLOR}" = 'true' && printf "\\033[34m" || echo)"
             return ""
         return "\n" + "\n".join(interpolations)
 
-    def recipe_lines(r: Recipe) -> str:
+    def recipe_tempfile_lines(r: Recipe) -> str:
         recipe_lines = []
         non_interp_data: List[str] = []
 
-        # Closure over recipe_lines and non_interp_data
+        # Closure over lines and non_interp_data
         def reset_non_interp_data():
             if non_interp_data:
                 recipe_lines.append(quote_string("".join(non_interp_data)))
@@ -991,19 +992,24 @@ BLUE="$(test "${SHOW_COLOR}" = 'true' && printf "\\033[34m" || echo)"
 
         return "\n".join(lines)
 
+    def positional_arguments(r: Recipe) -> str:
+        args = []
+        if compiler_state.settings.get("positional-arguments"):
+            for param in r.parameters:
+                args.append(f'"${{{compiler_state.clean_var_name(param.name)}}}"')
+            if r.variadic:
+                args.append('"${@}"')
+        if not args:
+            return ""
+        return " ".join(args)
+
     def recipe_tempfile_body(r: Recipe, attributes: Set[str]) -> str:
+        """
+        Write the recipe body to a temporary file to execute via shebang.
+        """
         cat_recipe = ""
         if not r.echo:
             cat_recipe = '\n  cat "${TEMPFILE}" >&2'
-
-        positional_arguments = []
-        if compiler_state.settings.get("positional-arguments"):
-            for param in r.parameters:
-                positional_arguments.append(
-                    f'"${{{compiler_state.clean_var_name(param.name)}}}"'
-                )
-            if r.variadic:
-                positional_arguments.append('"${@}"')
 
         exit_message = ""
         if "no-exit-message" not in attributes:
@@ -1012,16 +1018,93 @@ BLUE="$(test "${SHOW_COLOR}" = 'true' && printf "\\033[34m" || echo)"
         return f"""  TEMPFILE="$(mktemp)"
   touch "${{TEMPFILE}}"
   chmod +x "${{TEMPFILE}}"{
-  interpolated_variables(r)
+  tempfile_interpolated_variables(r)
   }
-  echo {recipe_lines(r)} > "${{TEMPFILE}}"{
+  echo {recipe_tempfile_lines(r)} > "${{TEMPFILE}}"{
   cat_recipe
   }
-  env {export_variables(r)}"${{TEMPFILE}}" {" ".join(positional_arguments)} {exit_message}
+  env {export_variables(r)}"${{TEMPFILE}}" {positional_arguments(r)} {exit_message}
   rm "${{TEMPFILE}}" """
 
-    def recipe_regular_body(r: Recipe) -> str:
-        return ""
+    def regular_interpolated_variables(
+        r: Recipe, line: Line, i: int
+    ) -> Tuple[int, List[str]]:
+        interpolations = []
+        for part in line.data:
+            if isinstance(part, Interpolation):
+                exp = compiler_state.evaluate(part.expression)
+                interpolations.append(
+                    f"  INTERP_{i}={exp} || recipe_error '{r.name}' \"${{LINENO:-}}\""
+                )
+                i += 1
+        return i, interpolations
+
+    def recipe_body_line(
+        line: Line, interpolation_counter: int, attributes: Set[str]
+    ) -> str:
+        exec_str = []
+        for i, part in enumerate(line.data):
+            # TODO: Use better matching for "just" invocations. For example:
+            # match common shells, instead of replacing invocation for any
+            # non-default shell.
+            if (
+                isinstance(part, str)
+                and i == 0
+                and not compiler_state.settings.get("shell")
+                and part.startswith("just ")
+            ):
+                if "no-cd" in attributes:
+                    exec_str.append('"${0}"')
+                else:
+                    # TODO: Better invocation that doesn't assume this file has
+                    # chmod +x
+                    exec_str.append('"./$(basename "${0}")"')
+                part = part[4:]
+            if isinstance(part, str):
+                exec_str.append(compiler_state.evaluate(part))
+            elif isinstance(part, Interpolation):
+                exec_str.append(
+                    quote_string(f"${{INTERP_{interpolation_counter}}}", quote='"')
+                )
+                interpolation_counter += 1
+        return "".join(exec_str)
+
+    def recipe_regular_body(r: Recipe, attributes: Set[str]) -> str:
+        """
+        Write the recipe body to be directly executed.
+        """
+        lines = []
+        interpolation_counter = 1
+        for line in r.body:
+            # TODO: Should interpolations be executed in comments that are
+            # ignored? Add test for this behavior.
+            if (
+                compiler_state.settings.get("ignore-comments")
+                and len(line.data) > 0
+                and isinstance(line.data[0], str)
+                and line.data[0].startswith("#")
+            ):
+                continue
+            interpolation_counter_start = interpolation_counter
+            interpolation_counter, interpolations = regular_interpolated_variables(
+                r, line, interpolation_counter
+            )
+            lines.extend(interpolations)
+            exec_str = recipe_body_line(line, interpolation_counter_start, attributes)
+            if r.echo ^ (line.prefix is not None and "@" in line.prefix):
+                lines.append(f"  echo_recipe_line {exec_str}")
+            lines.append(
+                f'  env {export_variables(r)}"${{DEFAULT_SHELL}}" ${{DEFAULT_SHELL_ARGS}} \\'
+            )
+            if line.prefix is not None and "-" in line.prefix:
+                lines.append(f"    {exec_str} {positional_arguments(r)}\\")
+                lines.append("    || true")
+            elif "no-exit-message" in attributes:
+                lines.append(f"    {exec_str} {positional_arguments(r)}")
+            else:
+                lines.append(f"    {exec_str} {positional_arguments(r)}\\")
+                lines.append(f'    || recipe_error "{r.name}" "${{LINENO:-}}"')
+        return "\n".join(lines)
 
     def recipe_epilogue(r: Recipe) -> str:
         return ""
@@ -1042,7 +1125,7 @@ BLUE="$(test "${SHOW_COLOR}" = 'true' && printf "\\033[34m" || echo)"
         ):
             recipe_body = recipe_tempfile_body(r, attributes)
         else:
-            recipe_body = recipe_regular_body(r)
+            recipe_body = recipe_regular_body(r, attributes)
         change_workdir = ""
         if "no-cd" not in attributes:
             change_workdir = f'''\n\n  OLD_WD="$(pwd)"
