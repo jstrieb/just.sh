@@ -1106,8 +1106,42 @@ BLUE="$(test "${SHOW_COLOR}" = 'true' && printf "\\033[34m" || echo)"
                 lines.append(f'    || recipe_error "{r.name}" "${{LINENO:-}}"')
         return "\n".join(lines)
 
-    def recipe_epilogue(r: Recipe) -> str:
-        return ""
+    def after_dependencies(r: Recipe) -> str:
+        # TODO: Use a hash set of executed subcommands to more correctly
+        # determine whether to re-execute recipes
+        if not r.after_dependencies:
+            return ""
+        lines = []
+        after_deps_seen: Set[str] = set()
+        for dep in r.after_dependencies:
+            quoted_args = " ".join(
+                compiler_state.evaluate(arg) for arg in dep.default_args
+            )
+            if quoted_args:
+                quoted_args = " " + quoted_args
+            if dep.name not in after_deps_seen:
+                # Force running, even if it has run before
+                lines.append(
+                    f'  {compiler_state.clean_name("FORCE_" + dep.name)}="true"'
+                )
+                lines.append(
+                    f"  {compiler_state.clean_fun_name(dep.name)}{quoted_args}"
+                )
+                lines.append(f'  {compiler_state.clean_name("FORCE_" + dep.name)}=')
+        return "\n" + "\n".join(lines) + "\n\n"
+
+    def recipe_epilogue(r: Recipe, attributes: Set[str]) -> str:
+        cd = ""
+        if "no-cd" not in attributes:
+            cd = '  cd "${OLD_WD}"\n'
+
+        return f"""{
+  cd
+}{
+  after_dependencies(r)
+}  if [ -z "${{{compiler_state.clean_name("FORCE_" + r.name)}}}" ]; then
+    {compiler_state.clean_name("HAS_RUN_" + r.name)}="true"
+  fi"""
 
     def recipe(r: Recipe, attributes: Set[str], index: int) -> str:
         # Filter out platform-specific attributes (e.g., drop "private")
@@ -1140,7 +1174,7 @@ change_workdir
 {recipe_body}
 
   # Post-recipe dependencies and teardown
-{recipe_epilogue(r)}
+{recipe_epilogue(r, attributes)}
 }}"""
 
     def comment(c: Comment) -> str:
