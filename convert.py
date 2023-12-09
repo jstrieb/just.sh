@@ -1,5 +1,6 @@
 import argparse
 from collections import defaultdict
+from curses import echo
 import datetime
 import hashlib
 import logging
@@ -7,7 +8,19 @@ import os
 import re
 import stat
 import sys
-from typing import IO, Any, Callable, Dict, List, Set, Tuple, TypeVar, Union, cast
+from typing import (
+    IO,
+    Any,
+    Callable,
+    Dict,
+    List,
+    Optional,
+    Set,
+    Tuple,
+    TypeVar,
+    Union,
+    cast,
+)
 
 from parse import (
     Alias,
@@ -379,7 +392,9 @@ class CompilerState:
         ] = self.process_platform_recipes()
         self.docstrings: Dict[str, str] = self.process_docstrings()
         self.aliases: Dict[str, List[str]] = self.process_aliases()
-        self.process_recipe_parameters()
+        self.parameters = self.process_recipe_parameters()
+        self.unique_recipes, self.unique_targets = self.process_unique_recipes()
+        self.sorted_unique_targets = self.process_sorted_unique_targets()
 
     def process_settings(self) -> Dict[str, Union[bool, None, List[str]]]:
         """
@@ -690,14 +705,18 @@ class CompilerState:
             return f'"$({self.clean_name(conditional_function_name)}' + args + ')"'
         raise ValueError(f"Unexpected expression type {str(to_eval)}")
 
-    def process_recipe_parameters(self):
-        seen_parameters: Dict[str, Any] = dict()
+    def process_recipe_parameters(
+        self,
+    ) -> Dict[str, List[Union[Parameter, VarStar, VarPlus]]]:
+        seen_parameters: Dict[str, List[Union[Parameter, VarStar, VarPlus]]] = dict()
         for item in self.parsed:
             if isinstance(item.item, Recipe):
                 recipe = item.item
-                recipe_params = [*recipe.parameters]
+                recipe_params: List[Union[Parameter, VarStar, VarPlus]] = [
+                    *recipe.parameters
+                ]
                 if recipe.variadic:
-                    recipe_params.append(recipe.variadic.param)
+                    recipe_params.append(recipe.variadic)
                 if (
                     recipe.name in seen_parameters
                     and seen_parameters[recipe.name] != recipe_params
@@ -708,9 +727,39 @@ class CompilerState:
                         f"the file will be listed."
                     )
                 seen_parameters[recipe.name] = recipe_params
+        return seen_parameters
+
+    def process_unique_recipes(self) -> Tuple[List[str], List[str]]:
+        seen, unique_recipes, unique_targets = set(), list(), list()
+        for target in self.recipes:
+            if target in seen:
+                continue
+            seen.add(target)
+            if target not in self.private_recipes:
+                unique_recipes.append(target)
+            unique_targets.append(target)
+            for alias_name in sorted(self.aliases.get(target, list())):
+                if alias_name not in seen:
+                    seen.add(alias_name)
+                    unique_targets.append(alias_name)
+        return unique_recipes, unique_targets
+
+    def process_sorted_unique_targets(self) -> List[str]:
+        seen, unique_targets = set(), list()
+        for target in sorted(self.recipes):
+            if target in seen:
+                continue
+            seen.add(target)
+            if target not in self.private_recipes:
+                unique_targets.append(target)
+            for alias_name in sorted(self.aliases.get(target, list())):
+                if alias_name not in seen and alias_name not in self.private_recipes:
+                    seen.add(alias_name)
+                    unique_targets.append(alias_name)
+        return unique_targets
 
 
-def _compile(compiler_state: CompilerState, outfile_path: str) -> str:
+def _compile(compiler_state: CompilerState, outfile_path: str, justfile: str) -> str:
     def header_comment(text: str) -> str:
         border = "#" * 89
         return f"""{border}
@@ -1235,6 +1284,203 @@ change_workdir
 
 {(newline * 2).join(compiled_recipes)}"""
 
+    def recipe_summaries() -> str:
+        unique_recipe_list = "echo 'Justfile contains no recipes' >&2"
+        if compiler_state.unique_recipes:
+            unique_recipe_list = f"""if [ "${{SORTED}}" = "true" ]; then
+    printf "%s" {' '.join(sorted(compiler_state.unique_recipes))}
+  else
+    printf "%s" {' '.join(compiler_state.unique_recipes)}
+  fi
+  echo\n"""
+        return unique_recipe_list
+
+    def comment_str(raw_comment: Optional[str]) -> str:
+        if not raw_comment:
+            return ""
+        return quote_string(f" # {raw_comment}")
+
+    def params_str(params: Optional[List[Union[Parameter, VarStar, VarPlus]]]) -> str:
+        if not params:
+            return ""
+        param_names = [parameter(p) for p in params]
+        return "' '" + "' '".join(param_names)
+
+    def colorized_target(target: str) -> str:
+        docstring = compiler_state.docstrings.get(target)
+        params = compiler_state.parameters.get(target)
+        return f'''echo "${{LIST_PREFIX}}"{
+            quote_string(target)
+        }{
+            params_str(params)
+        }"${{BLUE}}"{
+            comment_str(docstring)
+        }"${{NOCOLOR}}"'''
+
+    def list_fn() -> str:
+        if compiler_state.sorted_unique_targets:
+            sorted_colorized_targets = "\n    ".join(
+                [
+                    colorized_target(target)
+                    for target in compiler_state.sorted_unique_targets
+                ]
+            )
+        else:
+            sorted_colorized_targets = "true"
+        if not (
+            set(compiler_state.unique_targets) - set(compiler_state.private_recipes)
+        ):
+            colorized_targets = "true"
+        else:
+            colorized_targets = "\n   ".join(
+                [
+                    colorized_target(target)
+                    for target in compiler_state.unique_targets
+                    if target not in compiler_state.private_recipes
+                ]
+            )
+        return f"""listfn() {{
+  while [ "$#" -gt 0 ]; do
+    case "${{1}}" in
+    --list-heading)
+      shift
+      LIST_HEADING="${{1}}"
+      ;;
+
+    --list-prefix)
+      shift
+      LIST_PREFIX="${{1}}"
+      ;;
+
+    --unsorted)
+      SORTED="false"
+      ;;
+    esac
+    shift
+  done
+
+  printf "%s" "${{LIST_HEADING}}"
+  if [ "${{SORTED}}" = "true" ]; then 
+    {sorted_colorized_targets}
+  else
+    {colorized_targets}
+  fi
+}}"""
+
+    def dump_fn() -> str:
+        # Use hash of file instead of EOF to prevent issues if "EOF" literal is
+        # in the Justfile
+        sha = sha256(justfile)[:16]
+        return f"""dumpfn() {{
+  cat <<"{sha}"
+{justfile.strip()}
+{sha}
+}}"""
+
+    def spaced_var_name(name: str, max_len: int) -> str:
+        spaces = " " * (max_len - len(name) + 1)
+        return f'{name}{spaces}:= "\'"${{{compiler_state.clean_var_name(name)}}}"\'"'
+
+    def match_variable_case(name: str) -> str:
+        return f"""{name})
+      printf "%s" "${{{compiler_state.clean_var_name(name)}}}"
+      ;;"""
+
+    def evaluate_fn() -> str:
+        if compiler_state.variables:
+            max_len = max(len(k) for k in compiler_state.variables.keys())
+            echo_variables = "    \n".join(
+                f"echo '{spaced_var_name(name, max_len)}'"
+                for name in sorted(compiler_state.variables.keys())
+            )
+            variable_cases = "    \n".join(
+                match_variable_case(name) for name in compiler_state.variables.keys()
+            )
+        else:
+            echo_variables = "    true"
+            variable_cases = "    # No user-declared variables"
+        return f"""evaluatefn() {{
+  assign_variables || exit "${{?}}"
+  if [ "${{#}}" = "0" ]; then
+    {echo_variables}
+  else
+    case "${{1}}" in
+    {variable_cases}
+    *)
+      echo_error 'Justfile does not contain variable `'"${{1}}"'`.'
+      exit 1
+      ;;
+    esac
+  fi
+}}"""
+
+    def choose_fn() -> str:
+        return f"""choosefn() {{
+  echo {' '.join(quote_string(target) for target in compiler_state.unique_targets)} \\
+    | "${{DEFAULT_SHELL}}" ${{DEFAULT_SHELL_ARGS}} "${{CHOOSER}}"
+}}"""
+
+    def helper_functions() -> str:
+        return f"""
+{header_comment("Helper functions")}
+
+echo_error() {{
+  echo "${{RED}}error${{NOCOLOR}}: ${{BOLD}}${{1}}${{NOCOLOR}}" >&2
+}}
+
+recipe_error() {{
+  STATUS="${{?}}"
+  if [ -z "${{2:-}}" ]; then
+      echo_error "Recipe "'`'"${{1}}"'`'" failed with exit code ${{STATUS}}"
+  else
+      echo_error "Recipe "'`'"${{1}}"'`'" failed on line ${{2}} with exit code ${{STATUS}}"
+  fi
+  exit "${{STATUS}}"
+}}
+
+echo_recipe_line() {{
+  echo "${{BOLD}}${{1}}${{NOCOLOR}}" >&2
+}}
+
+# Sane, portable echo that doesn't escape characters like "\\n" behind your back
+echo() {{
+  if [ "${{#}}" -gt 0 ]; then
+    printf "%s\\n" "${{@}}"
+  else
+    printf "\\n"
+  fi
+}}
+            
+set_var() {{
+  export "VAR_${{1}}=${{2}}"
+}}
+            
+summarizefn() {{
+  while [ "$#" -gt 0 ]; do
+    case "${{1}}" in
+    --unsorted)
+      SORTED="false"
+      ;;
+    esac
+    shift
+  done
+
+  {recipe_summaries()}
+}}
+
+{list_fn()}
+
+{dump_fn()}
+
+{evaluate_fn()}
+
+{choose_fn()}
+"""
+
+    def main_entrypoint() -> str:
+        return f"""
+{header_comment("Main entrypoint")}"""
+
     ###
     # End of helper functions – main _compile output
     ###
@@ -1253,6 +1499,10 @@ fi
 
 {recipes()}
 
+{helper_functions()}
+
+{main_entrypoint()}
+
 
 {autogen_comment()}
 
@@ -1266,7 +1516,7 @@ fi
 
 def compile(justfile: str, f: IO, outfile_path: str, verbose: bool) -> None:
     compiler_state = CompilerState(justfile_parse(justfile, verbose=verbose))
-    f.write(_compile(compiler_state, outfile_path))
+    f.write(_compile(compiler_state, outfile_path, justfile))
 
 
 def main(justfile_path, outfile_path, verbose=False):
