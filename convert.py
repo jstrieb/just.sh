@@ -392,7 +392,9 @@ class CompilerState:
         ] = self.process_platform_recipes()
         self.docstrings: Dict[str, str] = self.process_docstrings()
         self.aliases: Dict[str, List[str]] = self.process_aliases()
-        self.parameters = self.process_recipe_parameters()
+        self.parameters: Dict[
+            str, List[Union[Parameter, VarStar, VarPlus]]
+        ] = self.process_recipe_parameters()
         self.unique_recipes, self.unique_targets = self.process_unique_recipes()
         self.sorted_unique_targets = self.process_sorted_unique_targets()
 
@@ -1474,12 +1476,215 @@ summarizefn() {{
 
 {evaluate_fn()}
 
-{choose_fn()}
-"""
+{choose_fn()}"""
+
+    def target_case(target: str) -> str:
+        recipe_parameters = compiler_state.parameters.get(target, [])
+        is_variadic = any(
+            isinstance(p, VarStar) or isinstance(p, VarPlus) for p in recipe_parameters
+        )
+        if is_variadic:
+            shift_params = "break\n    "
+        elif recipe_parameters:
+            shift_params = f"""if [ "${{#}}" -ge "{len(recipe_parameters)}" ]; then
+      shift {len(recipe_parameters)}
+    elif [ "${{#}}" -gt 0 ]; then
+      shift "${{#}}"
+    fi\n    """
+        else:
+            shift_params = ""
+        return f"""{target})
+    shift
+    assign_variables || exit "${{?}}"
+    {compiler_state.clean_fun_name(target)} "$@"
+    RUN_DEFAULT='false'
+    {shift_params};;"""
 
     def main_entrypoint() -> str:
+        target_cases = "\n\n  ".join(
+            target_case(target) for target in compiler_state.unique_targets
+        )
+        if compiler_state.recipes:
+            default_recipe = compiler_state.recipes[0]
+            default_call = ""
+            if compiler_state.parameters.get(default_recipe):
+                non_eq_parameters = len(
+                    [
+                        p
+                        for p in compiler_state.parameters.get(default_recipe, [])
+                        if (isinstance(p, Parameter) and p.value is None)
+                        or (not isinstance(p, Parameter) and p.param.value is None)
+                    ]
+                )
+                default_call += f"""if [ "${{#}}" -lt "{non_eq_parameters}" ]; then
+    echo_error 'Recipe `{
+      default_recipe
+    }` cannot be used as default recipe since it requires at least {
+      non_eq_parameters
+    } argument{
+      "s" if non_eq_parameters != 1 else ""
+    }.'
+    exit 1
+  fi\n  """
+            default_call += f"""assign_variables || exit "${{?}}"
+  {compiler_state.clean_fun_name(default_recipe)} "$@" """
+        else:
+            default_call = """assign_variables || exit "${?}"
+  exit 1"""
         return f"""
-{header_comment("Main entrypoint")}"""
+{header_comment("Main entrypoint")}
+
+(
+RUN_DEFAULT=true
+while [ "${{#}}" -gt 0 ]; do
+  case "${{1}}" in 
+  
+  # User-defined recipes
+  {target_cases}
+  
+  # Built-in flags
+  --list)
+    shift 
+    listfn "$@"
+    RUN_DEFAULT="false"
+    break
+    ;;
+    
+  -f|--justfile)
+    shift 2
+    echo "${{YELLOW}}warning${{NOCOLOR}}: ${{BOLD}}-f/--justfile not implemented by just.sh${{NOCOLOR}}" >&2
+    ;;
+
+  --summary)
+    shift
+    summarizefn "$@"
+    RUN_DEFAULT="false"
+    break
+    ;;
+
+  --list-heading)
+    shift
+    LIST_HEADING="${{1}}"
+    shift
+    ;;
+
+  --list-prefix)
+    shift
+    LIST_PREFIX="${{1}}"
+    shift
+    ;;
+
+  --unsorted)
+    SORTED="false"
+    shift
+    ;;
+
+  --shell)
+    shift
+    DEFAULT_SHELL="${{1}}"
+    shift
+    ;;
+
+  --shell-arg)
+    shift
+    DEFAULT_SHELL_ARGS="${{1}}"
+    shift
+    ;;
+    
+  --version)
+    shift
+    echo "just.sh {VERSION}"
+    echo
+    echo "https://github.com/jstrieb/just.sh"
+    RUN_DEFAULT="false"
+    break
+    ;;
+
+  --help)
+    shift
+    echo "No --help text yet..." >&2
+    # TODO
+    RUN_DEFAULT="false"
+    break
+    ;;
+
+  --choose)
+    shift
+    assign_variables || exit "${{?}}"
+    TARGET="$(choosefn)"
+    env "${{0}}" "${{TARGET}}" "$@"
+    RUN_DEFAULT="false"
+    break
+    ;;
+    
+  --chooser)
+    shift
+    CHOOSER="${{1}}"
+    shift
+    ;;
+    
+  *=*)
+    assign_variables || exit "${{?}}"
+    NAME="$(
+        echo "${{1}}" | tr '\\n' '\\r' | sed 's/\\([^=]*\\)=.*/\\1/g' | tr '\\r' '\\n'
+    )"
+    VALUE="$(
+        echo "${{1}}" | tr '\\n' '\\r' | sed 's/[^=]*=\\(.*\\)/\\1/g' | tr '\\r' '\\n'
+    )"
+    shift
+    set_var "${{NAME}}" "${{VALUE}}"
+    ;;
+
+  --set)
+    shift
+    assign_variables || exit "${{?}}"
+    NAME="${{1}}"
+    shift
+    VALUE="${{1}}"
+    shift
+    set_var "${{NAME}}" "${{VALUE}}"
+    ;;
+    
+  --dump)
+    RUN_DEFAULT="false"
+    dumpfn "$@"
+    break
+    ;;
+    
+  --evaluate)
+    shift
+    RUN_DEFAULT="false"
+    evaluatefn "$@"
+    break
+    ;;
+    
+  --init)
+    shift
+    RUN_DEFAULT="false"
+    if [ -f "justfile" ]; then
+      echo_error "Justfile "'`'"$(realpath "justfile")"'`'" already exists"
+      exit 1
+    fi
+    cat > "justfile" <<EOF
+default:
+    echo 'Hello, world!'
+EOF
+    echo 'Wrote justfile to `'"$(realpath "justfile")"'`' 2>&1 
+    break
+    ;;
+
+  *)
+    echo_error "Found argument '${{YELLOW}}${{1}}${{NOCOLOR}}' that wasn't expected, or isn't valid in this context"
+    # TODO: Print usage/--help
+    exit 1
+    ;;
+  esac
+done
+
+if [ "${{RUN_DEFAULT}}" = "true" ]; then
+  {default_call}
+fi
+)"""
 
     ###
     # End of helper functions – main _compile output
