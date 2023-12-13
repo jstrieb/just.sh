@@ -391,10 +391,10 @@ class CompilerState:
             str, Dict[str, str]
         ] = self.process_platform_recipes()
         self.docstrings: Dict[str, str] = self.process_docstrings()
-        self.aliases: Dict[str, List[str]] = self.process_aliases()
         self.parameters: Dict[
             str, List[Union[Parameter, VarStar, VarPlus]]
         ] = self.process_recipe_parameters()
+        self.aliases: Dict[str, List[str]] = self.process_aliases()
         self.unique_recipes, self.unique_targets = self.process_unique_recipes()
         self.sorted_unique_targets = self.process_sorted_unique_targets()
 
@@ -423,7 +423,7 @@ class CompilerState:
         if (
             settings.get("shell")
             and isinstance(settings.get("shell"), list)
-            and len(cast(List[str], settings.get("shell"))) <= 2
+            and len(cast(List[str], settings.get("shell"))) < 2
         ):
             raise ValueError("`shell` setting must have at least two elements.")
 
@@ -505,6 +505,10 @@ class CompilerState:
                 )
                 return
             if isinstance(ast_item, Conditional):
+                find_functions(ast_item.if_condition.left)
+                find_functions(ast_item.if_condition.right)
+                find_functions(ast_item.then)
+                find_functions(ast_item.else_then)
                 conditional_function_name = self.clean_name(
                     f"if_{sha256(str(ast_item))[:16]}"
                 )
@@ -629,6 +633,8 @@ class CompilerState:
             if isinstance(item.item, Alias):
                 alias = item.item
                 aliases[alias.aliased_to].append(alias.name)
+                if alias.aliased_to in self.parameters:
+                    self.parameters[alias.name] = self.parameters[alias.aliased_to]
         return aliases
 
     def clean_name(self, to_clean: str, prefix: str = "") -> str:
@@ -784,7 +790,7 @@ Run `./{os.path.basename(outfile_path)} --dump` to recover the original Justfile
             return ""
         return f"""\n\n{header_comment("Internal functions")}
 
-{"".join(f for f in compiler_state.functions.values())}"""
+{newline.join(f for f in compiler_state.functions.values())}"""
 
     def dotenv() -> str:
         if not compiler_state.settings.get("dotenv-load"):
@@ -875,7 +881,7 @@ BLUE="$(test "${SHOW_COLOR}" = 'true' && printf "\\033[34m" || echo)"
         if p.env_var:
             env = "'$'"
         name = '"${CYAN}"' + quote_string(p.name) + '"${NOCOLOR}"'
-        if p.value:
+        if p.value is not None:
             value = (
                 "'='"
                 + '"${GREEN}"'
@@ -903,7 +909,7 @@ BLUE="$(test "${SHOW_COLOR}" = 'true' && printf "\\033[34m" || echo)"
       echo "    ${{0}} "'{r.name} '{"' '".join(param_names)}
     ) >&2
     exit 1
-  fi"""
+  fi\n"""
 
     def param_assignments(r: Recipe) -> str:
         assignments = []
@@ -929,7 +935,7 @@ BLUE="$(test "${SHOW_COLOR}" = 'true' && printf "\\033[34m" || echo)"
                 )
             if param.value is not None:
                 assignments.append(
-                    f"""  if [ "${{#}}" -lt 1]; then
+                    f"""  if [ "${{#}}" -lt 1 ]; then
     set -- {compiler_state.evaluate(param.value)}
   fi"""
                 )
@@ -1016,7 +1022,7 @@ BLUE="$(test "${SHOW_COLOR}" = 'true' && printf "\\033[34m" || echo)"
         return "".join(recipe_lines)
 
     def export_variables(r: Recipe) -> str:
-        vars = compiler_state.exports
+        vars = [*compiler_state.exports]
         if compiler_state.settings.get("export"):
             vars += list(compiler_state.variables.keys())
         for param in r.parameters:
@@ -1043,15 +1049,15 @@ BLUE="$(test "${SHOW_COLOR}" = 'true' && printf "\\033[34m" || echo)"
 
         return "\n".join(lines)
 
-    def positional_arguments(r: Recipe) -> str:
+    def positional_arguments(r: Recipe, pass_recipe_name: bool = True) -> str:
         args = []
         if compiler_state.settings.get("positional-arguments"):
+            if pass_recipe_name:
+                args.append(f"'{r.name}'")
             for param in r.parameters:
                 args.append(f'"${{{compiler_state.clean_var_name(param.name)}}}"')
             if r.variadic:
                 args.append('"${@}"')
-        if not args:
-            return ""
         return " ".join(args)
 
     def recipe_tempfile_body(r: Recipe, attributes: Set[str]) -> str:
@@ -1074,7 +1080,9 @@ BLUE="$(test "${SHOW_COLOR}" = 'true' && printf "\\033[34m" || echo)"
   echo {recipe_tempfile_lines(r)} > "${{TEMPFILE}}"{
   cat_recipe
   }
-  env {export_variables(r)}"${{TEMPFILE}}" {positional_arguments(r)} {exit_message}
+  env {export_variables(r)}"${{TEMPFILE}}" {
+    positional_arguments(r, pass_recipe_name=False)
+  } {exit_message}
   rm "${{TEMPFILE}}" """
 
     def regular_interpolated_variables(
@@ -1148,12 +1156,12 @@ BLUE="$(test "${SHOW_COLOR}" = 'true' && printf "\\033[34m" || echo)"
                 f'  env {export_variables(r)}"${{DEFAULT_SHELL}}" ${{DEFAULT_SHELL_ARGS}} \\'
             )
             if line.prefix is not None and "-" in line.prefix:
-                lines.append(f"    {exec_str} {positional_arguments(r)}\\")
+                lines.append(f"    {exec_str} {positional_arguments(r)} \\")
                 lines.append("    || true")
             elif "no-exit-message" in attributes:
                 lines.append(f"    {exec_str} {positional_arguments(r)}")
             else:
-                lines.append(f"    {exec_str} {positional_arguments(r)}\\")
+                lines.append(f"    {exec_str} {positional_arguments(r)} \\")
                 lines.append(f'    || recipe_error "{r.name}" "${{LINENO:-}}"')
         return "\n".join(lines)
 
@@ -1179,6 +1187,7 @@ BLUE="$(test "${SHOW_COLOR}" = 'true' && printf "\\033[34m" || echo)"
                     f"  {compiler_state.clean_fun_name(dep.name)}{quoted_args}"
                 )
                 lines.append(f'  {compiler_state.clean_name("FORCE_" + dep.name)}=')
+                after_deps_seen.add(dep.name)
         return "\n" + "\n".join(lines) + "\n\n"
 
     def recipe_epilogue(r: Recipe, attributes: Set[str]) -> str:
@@ -1190,7 +1199,7 @@ BLUE="$(test "${SHOW_COLOR}" = 'true' && printf "\\033[34m" || echo)"
   cd
 }{
   after_dependencies(r)
-}  if [ -z "${{{compiler_state.clean_name("FORCE_" + r.name)}}}" ]; then
+}  if [ -z "${{{compiler_state.clean_name("FORCE_" + r.name)}:-}}" ]; then
     {compiler_state.clean_name("HAS_RUN_" + r.name)}="true"
   fi"""
 
@@ -1287,12 +1296,12 @@ change_workdir
 {(newline * 2).join(compiled_recipes)}"""
 
     def recipe_summaries() -> str:
-        unique_recipe_list = "echo 'Justfile contains no recipes' >&2"
+        unique_recipe_list = "echo 'Justfile contains no recipes.' >&2"
         if compiler_state.unique_recipes:
             unique_recipe_list = f"""if [ "${{SORTED}}" = "true" ]; then
-    printf "%s" {' '.join(sorted(compiler_state.unique_recipes))}
+    printf "%s " {' '.join(sorted(compiler_state.unique_recipes))}
   else
-    printf "%s" {' '.join(compiler_state.unique_recipes)}
+    printf "%s " {' '.join(compiler_state.unique_recipes)}
   fi
   echo\n"""
         return unique_recipe_list
@@ -1334,7 +1343,7 @@ change_workdir
         ):
             colorized_targets = "true"
         else:
-            colorized_targets = "\n   ".join(
+            colorized_targets = "\n    ".join(
                 [
                     colorized_target(target)
                     for target in compiler_state.unique_targets
@@ -1399,8 +1408,8 @@ change_workdir
                 match_variable_case(name) for name in compiler_state.variables.keys()
             )
         else:
-            echo_variables = "    true"
-            variable_cases = "    # No user-declared variables"
+            echo_variables = "true"
+            variable_cases = "# No user-declared variables"
         return f"""evaluatefn() {{
   assign_variables || exit "${{?}}"
   if [ "${{#}}" = "0" ]; then
@@ -1534,8 +1543,7 @@ summarizefn() {{
         return f"""
 {header_comment("Main entrypoint")}
 
-(
-RUN_DEFAULT=true
+RUN_DEFAULT='true'
 while [ "${{#}}" -gt 0 ]; do
   case "${{1}}" in 
   
@@ -1683,8 +1691,7 @@ done
 
 if [ "${{RUN_DEFAULT}}" = "true" ]; then
   {default_call}
-fi
-)"""
+fi"""
 
     ###
     # End of helper functions – main _compile output
