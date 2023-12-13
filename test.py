@@ -141,6 +141,32 @@ test2:
                 "test2",
             ),
         ),
+        (
+            """
+run args:
+  echo {{args}}
+
+run2 arg1 arg2 default="val":
+  echo {{arg1}}
+  echo Cool
+  echo {{arg2}}
+  echo Super cool
+  echo {{default}}
+
+alias r := run
+alias r2 := run2
+""",
+            [
+                ["run", "arg"],
+                ["run", "some arguments here!"],
+                ["r", "arg"],
+                ["r", "some arguments here!"],
+                *permuted_combinations(
+                    ("run2", "arg2", "arg3"), "extra", fix_first=True
+                ),
+                *permuted_combinations(("r2", "arg2", "arg3"), "extra", fix_first=True),
+            ],
+        ),
         # Settings
         # https://just.systems/man/en/chapter_24.html
         (
@@ -1085,6 +1111,12 @@ lint:
 
     for args in FLAG_COMBOS + permuted_combinations("default", "build", "test", "lint"):
         run_justfile(args)
+
+
+def test_evalute_without_quoting():
+    state = convert.CompilerState([])
+    assert state.evaluate("testing") == "'testing'"
+    assert state.evaluate("testing", quote=False) == "testing"
 
 
 NORMALIZE_REGEXES = [

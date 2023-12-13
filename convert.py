@@ -1247,7 +1247,7 @@ change_workdir
 
     def alias(a: Alias) -> str:
         return f"""{compiler_state.clean_fun_name(a.name)}() {{
-  {compiler_state.clean_fun_name(a.aliased_to)}
+  {compiler_state.clean_fun_name(a.aliased_to)} "$@"
 }}"""
 
     def platform_dispatchers() -> List[str]:
