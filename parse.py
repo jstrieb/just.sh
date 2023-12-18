@@ -428,7 +428,7 @@ def parse(data, verbose=False):
             << eol
         )
         .many()
-        .map(lambda l: Attributes([x for l2 in l for x in l2]))
+        .map(lambda row: Attributes([x for col in row for x in col]))
         .map(debug("attribute"))
     )
 

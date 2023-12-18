@@ -1,11 +1,9 @@
 import argparse
 from collections import defaultdict
-from curses import echo
 import datetime
 import hashlib
 import logging
 import os
-import re
 import stat
 import sys
 from typing import (
@@ -1222,8 +1220,8 @@ BLUE="$(test "${SHOW_COLOR}" = 'true' && printf "\\033[34m" || echo)"
             recipe_body = recipe_regular_body(r, attributes)
         change_workdir = ""
         if "no-cd" not in attributes:
-            change_workdir = f'''\n\n  OLD_WD="$(pwd)"
-  cd "${{INVOCATION_DIRECTORY}}"'''
+            change_workdir = '''\n\n  OLD_WD="$(pwd)"
+  cd "${INVOCATION_DIRECTORY}"'''
         return f"""{compiler_state.clean_fun_name(function_name)}() {{
   # Recipe setup and pre-recipe dependencies
 {recipe_preamble(r)}{

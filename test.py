@@ -10,9 +10,9 @@ import convert
 import parse
 
 
-def flatten(l):
+def flatten(input_list):
     result = []
-    for x in l:
+    for x in input_list:
         if isinstance(x, tuple) or isinstance(x, list):
             result += list(x)
         else:
