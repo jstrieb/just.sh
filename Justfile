@@ -20,3 +20,5 @@ alias lint := lint-python
 lint-python:
     black .
     mypy --check-untyped-defs .
+    ruff check --fix .
+

@@ -13,7 +13,7 @@ import parse
 def flatten(input_list):
     result = []
     for x in input_list:
-        if isinstance(x, tuple) or isinstance(x, list):
+        if isinstance(x, (tuple, list)):
             result += list(x)
         else:
             result.append(x)
@@ -253,7 +253,11 @@ foo:
             # TODO: Change argument parsing loop to parse flags first, then
             #  recipes. Until then, permutations where variable setting happens
             #  after the recipes succeed when they should fail.
-            # permuted_combinations("foo", ("--set", "foos", "ro dah"), "foos=DDDDDDDDD"),
+            # permuted_combinations(
+            #     "foo",
+            #     ("--set", "foos", "ro dah"),
+            #     "foos=DDDDDDDDD",
+            # ),
             [
                 ["foo"],
                 ["--set", "foos", "ro dah"],
@@ -410,14 +414,15 @@ test default = join("one", "two", 'three'):
   echo "{{ if home_dir == home_dir_2 { "$(echo equal)" } else { "unequal!" } }}"
   echo "{{env_var_or_default('ThIs_DoEs_NoT_eXiSt', 'FAKE!!!')}}"
   echo "{{invocation_directory()}}"
-  echo "{{justfile_directory()}} + {{justfile()}} = {{justfile_directory() / justfile()}}"
+  echo "{{justfile_directory()}}+{{justfile()}} = {{justfile_directory() / justfile()}}"
   echo "Alternatively, {{justfile_directory() + justfile()}}"
   echo {{quote("I'd've should've quoted this!")}}
   echo {{uppercase(quote("I'd've should've quoted this!"))}}
   echo {{lowercase(quote("I'd've should've quoted this!"))}}
   echo {{default}}
   echo {{sha256(default)}}
-  echo '{{if uuid() == "0" { "something has gone horribly wrong" } else { "success" } }}'
+  echo '{{if uuid() == "0" { "uh oh...$$$" } else { "success" } }}'
+  echo '{{if uuid()=="0"{"something has gone horribly wrong"}else{"success"} }}'
   
 should_fail:
   echo "{{invocation_directory()}}
@@ -439,7 +444,11 @@ try-hash filename=to-hash: (make-file filename)
   #!/bin/bash
   set -euo pipefail
 
-  if [ "$(sha256sum {{filename}} | cut -d ' ' -f 1)" != "{{sha256_file(filename)}}" ]; then
+  if [ \
+      "$(sha256sum {{filename}} | cut -d ' ' -f 1)" \
+      != \
+      "{{sha256_file(filename)}}" \
+  ]; then
     echo "FAILURE"
     echo "$(sha256sum {{filename}} | cut -d ' ' -f 1)"
     echo "{{sha256_file(filename)}}"
@@ -536,7 +545,8 @@ export VAR := "value that should not appear in backticks"
 bullets := `echo "this is a test" | tr ' ' '\n' | sed 's/^/- /'`
 unbound := `echo "${VAR}" | tr ' ' '\n' | sed 's/^/- /'`
     
-# This backtick evaluates the command `echo foo\necho bar\n`, which produces the value `foo\nbar\n`.
+# This backtick evaluates the command `echo foo\necho bar\n`, which produces the
+# value `foo\nbar\n`.
 stuff := ```
     echo foo
     echo bar
@@ -987,7 +997,9 @@ set positional-arguments
 # The recipe below has some indented newlines and some empty newlines. It is 
 # hard to see in some editors, but testing lines with all spaces and lines with 
 # no spaces are both important.
-python3 $default=(if if "a" != "b" { "no" } else { "yes" } == "no" { "yes" } else { "no" }):
+python3 $default=(
+  if if "a" != "b" { "no" } else { "yes" } == "no" { "yes" } else { "no" }
+):
     #!/usr/bin/python3
 
     def main():
@@ -1053,6 +1065,7 @@ empty arg="nondefault":
                 ["with-args", "the arg", "first-dep"],
             ],
         ),
+        reverse=False,
     ),
 )
 def test_justfile(args, justfile_content, tmpdir):

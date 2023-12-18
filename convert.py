@@ -1,11 +1,11 @@
 import argparse
-from collections import defaultdict
 import datetime
 import hashlib
 import logging
 import os
 import stat
 import sys
+from collections import defaultdict
 from typing import (
     IO,
     Any,
@@ -41,16 +41,17 @@ from parse import (
     RegexEq,
     Setting,
     Sum,
+    Variable,
     VarPlus,
     VarStar,
-    Variable,
+)
+from parse import (
     parse as justfile_parse,
 )
 
-
-#########################################################################################
-# Global Variables and Types                                                            #
-#########################################################################################
+########################################################################################
+# Global Variables and Types                                                           #
+########################################################################################
 
 
 VERSION = "0.0.1"
@@ -61,9 +62,9 @@ T = TypeVar("T")
 newline = "\n"
 
 
-#########################################################################################
-# Utility Functions                                                                     #
-#########################################################################################
+########################################################################################
+# Utility Functions                                                                    #
+########################################################################################
 
 
 def quote_string(instring: str, quote: str = "'") -> str:
@@ -148,9 +149,9 @@ def expression_to_string(expression: ExpressionType, depth: int = 0) -> str:
     raise ValueError(f"Unexpected expression type {type(expression)}.")
 
 
-#########################################################################################
-# POSIX sh Implementations of just Functions                                            #
-#########################################################################################
+########################################################################################
+# POSIX sh Implementations of just Functions                                           #
+########################################################################################
 
 just_functions = {
     # TODO: Add more
@@ -358,9 +359,9 @@ def get_function(name: str) -> str:
     raise NotImplementedError()
 
 
-#########################################################################################
-# Helper Classes and Functions                                                          #
-#########################################################################################
+########################################################################################
+# Helper Classes and Functions                                                         #
+########################################################################################
 
 
 class CompilerState:
@@ -494,13 +495,13 @@ class CompilerState:
             if isinstance(ast_item, Div):
                 return find_functions(ast_item.div_1), find_functions(ast_item.div_2)
             if isinstance(ast_item, Backtick):
-                functions["backtick_error"] = (
-                    "backtick_error() {\n"
-                    '  STATUS="${?}"\n'
-                    '  echo_error "Backtick failed with exit code ${STATUS}"\n'
-                    '  exit "${STATUS}"\n'
-                    "}\n"
-                )
+                functions[
+                    "backtick_error"
+                ] = """backtick_error() {
+  STATUS="${?}"
+  echo_error "Backtick failed with exit code ${STATUS}"
+  exit "${STATUS}"
+}\n"""
                 return
             if isinstance(ast_item, Conditional):
                 find_functions(ast_item.if_condition.left)
@@ -511,20 +512,18 @@ class CompilerState:
                     f"if_{sha256(str(ast_item))[:16]}"
                 )
                 if isinstance(ast_item.if_condition, RegexEq):
-                    functions[conditional_function_name] = (
-                        f"{conditional_function_name}() {{\n"
-                        f"  if "
-                        f"echo {self.evaluate(ast_item.if_condition.left)} | "
-                        f"grep -E {self.evaluate(ast_item.if_condition.right)} > /dev/null; "
-                        f"then \n"
-                        f'    THEN_EXPR={self.evaluate(ast_item.then)} || exit "${{?}}"\n'
-                        f'    echo "${{THEN_EXPR}}"\n'
-                        f"  else\n"
-                        f'    ELSE_EXPR={self.evaluate(ast_item.else_then)} || exit "${{?}}"\n'
-                        f'    echo "${{ELSE_EXPR}}"\n'
-                        f"  fi\n"
-                        f"}}\n"
-                    )
+                    functions[
+                        conditional_function_name
+                    ] = f"""{conditional_function_name}() {{
+  if echo {self.evaluate(ast_item.if_condition.left)} \\
+      | grep -E {self.evaluate(ast_item.if_condition.right)} > /dev/null; then
+    THEN_EXPR={self.evaluate(ast_item.then)} || exit "${{?}}"
+    echo "${{THEN_EXPR}}"
+  else
+    ELSE_EXPR={self.evaluate(ast_item.else_then)} || exit "${{?}}"
+    echo "${{ELSE_EXPR}}"
+  fi
+}}\n"""
                     return
                 if isinstance(ast_item.if_condition, Eq):
                     comparison = "="
@@ -532,20 +531,21 @@ class CompilerState:
                     comparison = "!="
                 else:
                     raise ValueError(f"Bad if condition {str(ast_item.if_condition)}.")
-                functions[conditional_function_name] = (
-                    f"{conditional_function_name}() {{\n"
-                    f"  if [ "
-                    f"{self.evaluate(ast_item.if_condition.left)} "
-                    f"{comparison} "
-                    f"{self.evaluate(ast_item.if_condition.right)} ]; then \n"
-                    f'    THEN_EXPR={self.evaluate(ast_item.then)} || exit "${{?}}"1\n'
-                    f'    echo "${{THEN_EXPR}}"\n'
-                    f"  else\n"
-                    f'    ELSE_EXPR={self.evaluate(ast_item.else_then)} || exit "${{?}}"\n'
-                    f'    echo "${{ELSE_EXPR}}"\n'
-                    f"  fi\n"
-                    f"}}\n"
-                )
+                functions[
+                    conditional_function_name
+                ] = f"""{conditional_function_name}() {{
+  if [ {
+    self.evaluate(ast_item.if_condition.left)
+  } {comparison} {
+    self.evaluate(ast_item.if_condition.right)
+  } ]; then
+    THEN_EXPR={self.evaluate(ast_item.then)} || exit "${{?}}"
+    echo "${{THEN_EXPR}}"
+  else
+    ELSE_EXPR={self.evaluate(ast_item.else_then)} || exit "${{?}}"
+    echo "${{ELSE_EXPR}}"
+  fi
+}}\n"""
                 return
             if isinstance(ast_item, Function):
                 conditional_function_name = ast_item.name
@@ -567,9 +567,10 @@ class CompilerState:
     def process_private_recipes(self) -> List[str]:
         private_recipes = []
         for item in self.parsed:
-            if isinstance(item.item, Recipe) or isinstance(item.item, Alias):
-                if "private" in item.attributes.names or item.item.name.startswith("_"):
-                    private_recipes.append(item.item.name)
+            if isinstance(item.item, (Recipe, Alias)) and (
+                "private" in item.attributes.names or item.item.name.startswith("_")
+            ):
+                private_recipes.append(item.item.name)
         return private_recipes
 
     def list_all_recipes(self, allow_duplicate_recipes) -> List[str]:
@@ -707,7 +708,11 @@ class CompilerState:
             conditional_function_name = to_eval.name
             args = ""
             if to_eval.arguments:
-                args = f" {' '.join([self.evaluate(argument) for argument in to_eval.arguments])}"
+                args = f""" {
+                    ' '.join(
+                        [self.evaluate(argument) for argument in to_eval.arguments]
+                    )
+                }"""
             return f'"$({self.clean_name(conditional_function_name)}' + args + ')"'
         raise ValueError(f"Unexpected expression type {str(to_eval)}")
 
@@ -729,8 +734,8 @@ class CompilerState:
                 ):
                     logging.warning(
                         f"Recipe {recipe.name} has different parameters than other versions of the "
-                        f"same recipe. Only the parameters for the last version of the recipe in "
-                        f"the file will be listed."
+                        f"same recipe. Only the parameters for the last version of the recipe "
+                        f"in the file will be listed."
                     )
                 seen_parameters[recipe.name] = recipe_params
         return seen_parameters
@@ -777,7 +782,9 @@ def _compile(compiler_state: CompilerState, outfile_path: str, justfile: str) ->
             f"""
 This script was auto-generated from a Justfile by just.sh.
 
-Generated on {datetime.datetime.now().strftime('%Y-%m-%d')} with just.sh version {VERSION}.
+Generated on {
+    datetime.datetime.now().strftime('%Y-%m-%d')
+} with just.sh version {VERSION}.
 https://github.com/jstrieb/just.sh
 
 Run `./{os.path.basename(outfile_path)} --dump` to recover the original Justfile.\n\n"""
@@ -902,7 +909,9 @@ BLUE="$(test "${SHOW_COLOR}" = 'true' && printf "\\033[34m" || echo)"
             param_names.append(parameter(r.variadic))
         return f"""  if [ "${{#}}" -lt {min_args} ]; then
     (
-      echo_error 'Recipe `{r.name}`'" got ${{#}} arguments but takes {at_least}{min_args}"
+      echo_error 'Recipe `{
+        r.name
+      }`'" got ${{#}} arguments but takes {at_least}{min_args}"
       echo "${{BOLD}}usage:${{NOCOLOR}}"
       echo "    ${{0}} "'{r.name} '{"' '".join(param_names)}
     ) >&2
@@ -962,10 +971,14 @@ BLUE="$(test "${SHOW_COLOR}" = 'true' && printf "\\033[34m" || echo)"
     def recipe_before_dependencies(r: Recipe) -> str:
         if not r.before_dependencies:
             return ""
-        return f"\n\n{newline.join(before_dependency(r, d) for d in r.before_dependencies)}"
+        return f"""\n\n{
+            newline.join(before_dependency(r, d) for d in r.before_dependencies)
+        }"""
 
     def recipe_preamble(r: Recipe) -> str:
-        return f"""  test -z "${{{compiler_state.clean_name("HAS_RUN_" + r.name)}:-}}" \\
+        return f"""  test -z "${{{
+            compiler_state.clean_name("HAS_RUN_" + r.name)
+        }:-}}" \\
     || test "${{{compiler_state.clean_name("FORCE_" + r.name)}:-}}" = "true" \\
     || return 0{
         recipe_parameter_processing(r)
@@ -986,7 +999,9 @@ BLUE="$(test "${SHOW_COLOR}" = 'true' && printf "\\033[34m" || echo)"
                 if isinstance(part, Interpolation):
                     exp = compiler_state.evaluate(part.expression)
                     interpolations.append(
-                        f"  INTERP_{i}={exp} || recipe_error '{r.name}' \"${{LINENO:-}}\""
+                        f'''  INTERP_{i}={exp} || recipe_error '{
+                            r.name
+                        }' \"${{LINENO:-}}\"'''
                     )
                     i += 1
         if not interpolations:
@@ -1151,7 +1166,9 @@ BLUE="$(test "${SHOW_COLOR}" = 'true' && printf "\\033[34m" || echo)"
             if r.echo ^ (line.prefix is not None and "@" in line.prefix):
                 lines.append(f"  echo_recipe_line {exec_str}")
             lines.append(
-                f'  env {export_variables(r)}"${{DEFAULT_SHELL}}" ${{DEFAULT_SHELL_ARGS}} \\'
+                f"""  env {
+                    export_variables(r)
+                }"${{DEFAULT_SHELL}}" ${{DEFAULT_SHELL_ARGS}} \\"""
             )
             if line.prefix is not None and "-" in line.prefix:
                 lines.append(f"    {exec_str} {positional_arguments(r)} \\")
@@ -1397,13 +1414,13 @@ change_workdir
 
     def evaluate_fn() -> str:
         if compiler_state.variables:
-            max_len = max(len(k) for k in compiler_state.variables.keys())
+            max_len = max(len(k) for k in compiler_state.variables)
             echo_variables = "    \n".join(
                 f"echo '{spaced_var_name(name, max_len)}'"
                 for name in sorted(compiler_state.variables.keys())
             )
             variable_cases = "    \n".join(
-                match_variable_case(name) for name in compiler_state.variables.keys()
+                match_variable_case(name) for name in compiler_state.variables
             )
         else:
             echo_variables = "true"
@@ -1487,9 +1504,7 @@ summarizefn() {{
 
     def target_case(target: str) -> str:
         recipe_parameters = compiler_state.parameters.get(target, [])
-        is_variadic = any(
-            isinstance(p, VarStar) or isinstance(p, VarPlus) for p in recipe_parameters
-        )
+        is_variadic = any(isinstance(p, (VarStar, VarPlus)) for p in recipe_parameters)
         if is_variadic:
             shift_params = "break\n    "
         elif recipe_parameters:
@@ -1719,9 +1734,9 @@ fi
 """
 
 
-#########################################################################################
-# Main Function                                                                         #
-#########################################################################################
+########################################################################################
+# Main Function                                                                        #
+########################################################################################
 
 
 def compile(justfile: str, f: IO, outfile_path: str, verbose: bool) -> None:
@@ -1738,7 +1753,7 @@ def main(justfile_path, outfile_path, verbose=False):
     if justfile_path is None or justfile_path == "-":
         justfile_data = sys.stdin.read()
     else:
-        with open(justfile_path, "r") as f:
+        with open(justfile_path) as f:
             justfile_data = f.read()
 
     if outfile_path == "-":

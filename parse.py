@@ -5,19 +5,21 @@ import os.path
 import re
 import sys
 from dataclasses import dataclass
-from typing import List, Any, Optional, Union
+from typing import Any, List, Optional, Union
 
 from parsy import (
-    string as strp,
-    regex,
+    alt,
     any_char,
     eof,
     forward_declaration,
+    generate,
+    peek,
+    regex,
     seq,
     whitespace,
-    alt,
-    peek,
-    generate,
+)
+from parsy import (
+    string as strp,
 )
 
 
@@ -524,7 +526,7 @@ def main(justfile_path, verbose=False):
     if justfile_path is None or justfile_path == "-":
         run(sys.stdin, encoder, verbose=verbose)
     else:
-        with open(justfile_path, "r") as f:
+        with open(justfile_path) as f:
             run(f, encoder, verbose=verbose)
 
 
