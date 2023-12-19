@@ -1764,7 +1764,7 @@ def main(justfile_path, outfile_path, verbose=False):
         os.chmod(outfile_path, os.stat(outfile_path).st_mode | stat.S_IEXEC)
 
 
-if __name__ == "__main__":
+def cli_entrypoint():
     parser = argparse.ArgumentParser(description="Compile a Justfile to a shell script")
     parser.add_argument("-i", "--infile", action="store", help="Input Justfile path")
     parser.add_argument(
@@ -1786,3 +1786,7 @@ if __name__ == "__main__":
     logging.basicConfig(format="%(levelname)s: %(message)s")
 
     main(parsed_args.infile, parsed_args.outfile, verbose=parsed_args.verbose)
+
+
+if __name__ == "__main__":
+    cli_entrypoint()
