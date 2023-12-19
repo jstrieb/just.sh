@@ -31,7 +31,7 @@ justfile
 $ just --summary
 build lint test
 
-$ pyjust
+$ just.sh
 
 $ ls
 justfile just.sh
