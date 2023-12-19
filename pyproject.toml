@@ -51,6 +51,7 @@ test = [
     "ruff >= 0.1.8",
     # Testing
     "pytest >= 7.4.3",
+    "coverage[toml] >= 7.3.2",
     "pytest-cov >= 4.1.0",
     "pytest-xdist >= 3.5.0",
 ]
@@ -76,3 +77,25 @@ strict = true
 [[tool.mypy.overrides]]
 module = "parsy"
 ignore_missing_imports = true
+
+[tool.coverage.run]
+relative_files = true
+
+[tool.coverage.report]
+exclude_lines = [
+    # Have to re-enable the standard pragma
+    "pragma: no cover",
+
+    # Don't complain if tests don't hit defensive assertion code
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "raise RuntimeError",
+    "raise ValueError",
+
+    # Don't complain if non-runnable code isn't run
+    "if __name__ == .__main__.:",
+    # "main\(",
+
+    # Ignore unused conditionals
+    "pass",
+]
