@@ -20,7 +20,7 @@ from typing import (
     cast,
 )
 
-from parse import (
+from .parse import (
     Alias,
     Assignment,
     Backtick,
@@ -45,7 +45,7 @@ from parse import (
     VarPlus,
     VarStar,
 )
-from parse import (
+from .parse import (
     parse as justfile_parse,
 )
 

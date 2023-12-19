@@ -6,8 +6,8 @@ import subprocess
 
 import pytest
 
-import convert
-import parse
+import just_sh.convert as convert
+import just_sh.parse as parse
 
 
 def flatten(input_list):
