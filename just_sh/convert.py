@@ -7,7 +7,6 @@ import stat
 import sys
 from collections import defaultdict
 from typing import (
-    IO,
     Any,
     Callable,
     Dict,
@@ -77,7 +76,12 @@ def quote_string(instring: str, quote: str = "'") -> str:
     return quote + replaced + quote
 
 
-def pad_line(line, terminator=" #", line_length=89, ignore_overflow=False):
+def pad_line(
+    line: str,
+    terminator: str = " #",
+    line_length: int = 89,
+    ignore_overflow: bool = False,
+) -> str:
     if len(line) > line_length and not ignore_overflow:
         raise ValueError(f"Line has length {len(line)} > {line_length}:\n{line}")
     return line + " " * (line_length - len(line) - len(terminator)) + terminator
@@ -87,7 +91,7 @@ def sha256(s: str) -> str:
     return hashlib.sha256(s.encode("utf-8")).digest().hex()
 
 
-def identity(x: T, *args, **kwargs) -> T:
+def identity(x: T, *args: Any, **kwargs: Any) -> T:
     return x
 
 
@@ -365,7 +369,7 @@ def get_function(name: str) -> str:
 
 
 class CompilerState:
-    def __init__(self, parsed) -> None:
+    def __init__(self, parsed: List[Item]) -> None:
         self.parsed = parsed
         self.internal_names: Dict[str, str] = dict()
 
@@ -384,7 +388,7 @@ class CompilerState:
         self.functions: Dict[str, str] = self.process_used_functions()
         self.private_recipes: List[str] = self.process_private_recipes()
         self.recipes: List[str] = self.list_all_recipes(
-            self.settings.get("allow-duplicate-recipes")
+            cast(Optional[bool], self.settings.get("allow-duplicate-recipes"))
         )
         self.platform_specific_recipes: Dict[
             str, Dict[str, str]
@@ -465,7 +469,8 @@ class CompilerState:
                 functions["os_family"] = get_function("os_family")
 
         # Closure over local `functions` variable
-        def find_functions(ast_item) -> Any:
+        # TODO: Replace Any with correct type
+        def find_functions(ast_item: Any) -> Any:
             """
             Recursively walk the AST and update `functions` with any function in
             the tree.
@@ -573,7 +578,7 @@ class CompilerState:
                 private_recipes.append(item.item.name)
         return private_recipes
 
-    def list_all_recipes(self, allow_duplicate_recipes) -> List[str]:
+    def list_all_recipes(self, allow_duplicate_recipes: Optional[bool]) -> List[str]:
         recipes = []
         for item in self.parsed:
             if isinstance(item.item, Recipe):
@@ -1013,7 +1018,7 @@ BLUE="$(test "${SHOW_COLOR}" = 'true' && printf "\\033[34m" || echo)"
         non_interp_data: List[str] = []
 
         # Closure over lines and non_interp_data
-        def reset_non_interp_data():
+        def reset_non_interp_data() -> None:
             if non_interp_data:
                 recipe_lines.append(quote_string("".join(non_interp_data)))
                 non_interp_data.clear()
@@ -1739,12 +1744,14 @@ fi
 ########################################################################################
 
 
-def compile(justfile: str, f: IO, outfile_path: str, verbose: bool) -> None:
+def compile(justfile: str, outfile_path: str, verbose: bool) -> str:
     compiler_state = CompilerState(justfile_parse(justfile, verbose=verbose))
-    f.write(_compile(compiler_state, outfile_path, justfile))
+    return _compile(compiler_state, outfile_path, justfile)
 
 
-def main(justfile_path, outfile_path, verbose=False):
+def main(
+    justfile_path: Optional[str], outfile_path: str, verbose: bool = False
+) -> None:
     if justfile_path is None:
         for filename in ["justfile", ".justfile", "Justfile", ".Justfile"]:
             if os.path.isfile(filename):
@@ -1757,14 +1764,14 @@ def main(justfile_path, outfile_path, verbose=False):
             justfile_data = f.read()
 
     if outfile_path == "-":
-        compile(justfile_data, sys.stdout, "just.sh", verbose)
+        sys.stdout.write(compile(justfile_data, "just.sh", verbose))
     else:
         with open(outfile_path, "w") as f:
-            compile(justfile_data, f, outfile_path, verbose)
+            f.write(compile(justfile_data, outfile_path, verbose))
         os.chmod(outfile_path, os.stat(outfile_path).st_mode | stat.S_IEXEC)
 
 
-def cli_entrypoint():
+def cli_entrypoint() -> None:
     parser = argparse.ArgumentParser(description="Compile a Justfile to a shell script")
     parser.add_argument("-i", "--infile", action="store", help="Input Justfile path")
     parser.add_argument(

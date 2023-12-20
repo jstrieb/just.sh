@@ -5,9 +5,10 @@ import os.path
 import re
 import sys
 from dataclasses import dataclass
-from typing import Any, List, Optional, Union
+from typing import Any, Callable, List, Optional, TextIO, Tuple, Union, cast
 
 from parsy import (
+    Parser,
     alt,
     any_char,
     eof,
@@ -24,14 +25,14 @@ from parsy import (
 
 
 class DataclassDictEncoder(json.JSONEncoder):  # pragma: no cover
-    def default(self, o):
+    def default(self, o: Any) -> Any:
         if dataclasses.is_dataclass(o):
             return dataclasses.asdict(o)
         return super().default(o)
 
 
 class DataclassStringEncoder(json.JSONEncoder):  # pragma: no cover
-    def default(self, o):
+    def default(self, o: Any) -> Any:
         if dataclasses.is_dataclass(o):
             return str(o)
         return super().default(o)
@@ -169,7 +170,7 @@ class Recipe:
     num_non_eq_params: int = dataclasses.field(init=False)
     num_eq_params: int = dataclasses.field(init=False)
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         try:
             self.num_non_eq_params = next(
                 i for i, p in enumerate(self.parameters) if p.value is not None
@@ -199,21 +200,21 @@ class Item:
 ExpressionType = Union[str, Variable, Sum, Div, Backtick, Conditional, Function]
 
 
-def parse(data, verbose=False):
-    def preprocess(raw_data):
+def parse(data: str, verbose: bool = False) -> List[Item]:
+    def preprocess(raw_data: str) -> str:
         return re.sub("\\\\s*\n\\s*", "", raw_data).strip() + "\n\n"
 
-    def surround(p):
-        def result(p2):
+    def surround(p: Parser) -> Callable[[Parser], Parser]:
+        def result(p2: Parser) -> Parser:
             return p >> p2 << p
 
         return result
 
-    def between(s):
+    def between(s: str) -> Parser:
         s_parser = strp(s)
         return surround(s_parser)(any_char.until(s_parser).concat())
 
-    def settings(*args):
+    def settings(*args: Tuple[str, Parser]) -> Parser:
         seqs = []
         for name, p in args:
             seqs.append(
@@ -224,21 +225,23 @@ def parse(data, verbose=False):
             )
         return alt(*seqs)
 
-    def debug(name):
+    # TODO: Replace Any with type variable
+    def debug(name: str) -> Callable[[Any], Any]:
         """
         Handy helper for logging which parsers ran – returns a version of the
         identity function with the side effect of printing the input if
         "verbose" is true.
         """
 
-        def _debug(val):
+        # TODO: Replace Any with type variable
+        def _debug(val: Any) -> Any:
             if verbose:
                 print(name, f'"{val}"')
             return val
 
         return _debug
 
-    def dedent(s):
+    def dedent(s: str) -> str:
         """
         Non-generic dedent – remove common whitespace prefixes for each
         indented line in a multiline string. Delete some leading and trailing
@@ -484,8 +487,8 @@ def parse(data, verbose=False):
         << eol
     ).map(debug("line"))
 
-    @generate
-    def _body():
+    @generate  # type: ignore  # Untyped decorator makes function _body untyped
+    def _body() -> Parser:
         initial_indent = yield peek(INDENT.at_least(1).concat())
         return (strp(initial_indent) >> line).at_least(1)
 
@@ -514,14 +517,14 @@ def parse(data, verbose=False):
     )
 
     justfile_parser = item.many() << eol.many() << EOF
-    return justfile_parser.parse(preprocess(data))
+    return cast(List[Item], justfile_parser.parse(preprocess(data)))
 
 
-def run(f, encoder, verbose=False):
+def run(f: TextIO, encoder: type[json.JSONEncoder], verbose: bool = False) -> None:
     print(json.dumps(parse(f.read(), verbose=verbose), cls=encoder, indent=2))
 
 
-def main(justfile_path, verbose=False):
+def main(justfile_path: str, verbose: bool = False) -> None:
     encoder = DataclassStringEncoder if verbose else DataclassDictEncoder
     if justfile_path is None or justfile_path == "-":
         run(sys.stdin, encoder, verbose=verbose)

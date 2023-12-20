@@ -3,6 +3,7 @@ import itertools
 import random
 import re
 import subprocess
+from typing import Any, Iterable, List, Tuple, Union
 
 import pytest
 
@@ -10,7 +11,7 @@ import just_sh.convert as convert
 import just_sh.parse as parse
 
 
-def flatten(input_list):
+def flatten(input_list: Iterable[Union[Iterable[Any], Any]]) -> List[Any]:
     result = []
     for x in input_list:
         if isinstance(x, (tuple, list)):
@@ -20,7 +21,7 @@ def flatten(input_list):
     return result
 
 
-def permuted_combinations(fixed, *args, fix_first=False):
+def permuted_combinations(fixed: Any, *args: Any, fix_first: bool = False) -> List[Any]:
     return [
         flatten([fixed, *permutation] if fix_first else permutation)
         for length in range(0 if fix_first else 1, len(args) + 1)
@@ -52,21 +53,23 @@ FLAG_COMBOS = [
 ]
 
 
-def chdir(justfile_content, tmpdir):
+def chdir(justfile_content: str, tmpdir: Any) -> None:
     justfile = tmpdir.join("Justfile")
     justfile.write(justfile_content)
     convert.main(str(justfile), str(tmpdir.join("just.sh")))
     tmpdir.chdir()
 
 
-def pair_args_justfile(*pairs, reverse=True):
+def pair_args_justfile(
+    *pairs: Tuple[str, List[List[str]]], reverse: bool = True
+) -> Iterable[Tuple[List[str], str]]:
     # Test in reverse order so more recent tests come first to avoid a wait
     for justfile, arg_combos in reversed(pairs) if reverse else pairs:
         for args in FLAG_COMBOS + arg_combos:
             yield args, justfile
 
 
-def run_justfile(args):
+def run_justfile(args: Iterable[str]) -> None:
     reference_run = subprocess.run(["just", *args], capture_output=True)
     script_run = subprocess.run(["sh", "./just.sh", *args], capture_output=True)
     assert normalize_output(reference_run.stderr) == normalize_output(script_run.stderr)
@@ -1068,12 +1071,12 @@ empty arg="nondefault":
         reverse=False,
     ),
 )
-def test_justfile(args, justfile_content, tmpdir):
+def test_justfile(args: List[str], justfile_content: str, tmpdir: Any) -> None:
     chdir(justfile_content, tmpdir)
     run_justfile(args)
 
 
-def test_dotenv(tmpdir):
+def test_dotenv(tmpdir: Any) -> None:
     tmpdir.chdir()
     justfile_content = """
 set dotenv-load
@@ -1097,7 +1100,7 @@ test exists=path_exists(".env"):
     parse.main("Justfile", verbose=True)
 
 
-def test_stdin_stdout(tmpdir, monkeypatch, capsys):
+def test_stdin_stdout(tmpdir: Any, monkeypatch: Any, capsys: Any) -> None:
     tmpdir.chdir()
     justfile_content = """
 default: lint build test
@@ -1126,7 +1129,7 @@ lint:
         run_justfile(args)
 
 
-def test_evalute_without_quoting():
+def test_evalute_without_quoting() -> None:
     state = convert.CompilerState([])
     assert state.evaluate("testing") == "'testing'"
     assert state.evaluate("testing", quote=False) == "testing"

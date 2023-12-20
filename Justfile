@@ -6,7 +6,7 @@ test cores="auto": lint-python
       --failed-first \
       --cov-config .coveragerc \
       --cov-report html \
-      --cov src \
+      --cov . \
       test/test.py
     python3 -m coverage report \
       --show-missing \
@@ -19,6 +19,6 @@ alias lint := lint-python
 
 lint-python:
     black .
-    mypy --check-untyped-defs .
-    ruff check --fix .
+    mypy .
+    ruff check .
 

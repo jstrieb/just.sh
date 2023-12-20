@@ -3,11 +3,11 @@ requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools.package-dir]
-just_sh = "src"
-pyjust = "src"
+just_sh = "just_sh"
+pyjust = "just_sh"
 
 [tool.setuptools.packages.find]
-where = ["src"]
+where = ["just_sh"]
 
 [tool.setuptools.package-data]
 "*" = ["py.typed"]
@@ -62,10 +62,10 @@ Repository = "https://github.com/jstrieb/just.sh.git"
 Issues = "https://github.com/jstrieb/just.sh/issues"
 
 [project.scripts]
-"just.sh" = "pyjust.convert:cli_entrypoint"
-just-sh = "pyjust.convert:cli_entrypoint"
-just_sh = "pyjust.convert:cli_entrypoint"
-pyjust = "pyjust.convert:cli_entrypoint"
+"just.sh" = "just_sh.convert:cli_entrypoint"
+just-sh = "just_sh.convert:cli_entrypoint"
+just_sh = "just_sh.convert:cli_entrypoint"
+pyjust = "just_sh.convert:cli_entrypoint"
 
 [tool.ruff.lint]
 select = ["E", "F", "UP", "B", "SIM", "I"]
@@ -80,6 +80,9 @@ ignore_missing_imports = true
 
 [tool.coverage.run]
 relative_files = true
+omit = [
+    "__*__.py",
+]
 
 [tool.coverage.report]
 exclude_lines = [
@@ -94,6 +97,7 @@ exclude_lines = [
 
     # Don't complain if non-runnable code isn't run
     "if __name__ == .__main__.:",
+    "cli_entrypoint\\(",
     # "main\(",
 
     # Ignore unused conditionals
