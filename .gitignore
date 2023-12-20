@@ -161,3 +161,7 @@ cython_debug/
 
 # VS Code project metadata
 .vscode/
+
+# Vim swap files
+*.swp
+*.swo
