@@ -19,6 +19,11 @@ from typing import (
     cast,
 )
 
+try:
+    from importlib.metadata import PackageNotFoundError, version
+except ImportError:
+    from importlib_metadata import PackageNotFoundError, version  # type: ignore
+
 from .parse import (
     Alias,
     Assignment,
@@ -53,7 +58,10 @@ from .parse import (
 ########################################################################################
 
 
-VERSION = "0.0.1"
+try:
+    __version__ = version("just_sh")
+except PackageNotFoundError:
+    __version__ = "unknown"
 
 T = TypeVar("T")
 
@@ -789,7 +797,7 @@ This script was auto-generated from a Justfile by just.sh.
 
 Generated on {
     datetime.datetime.now().strftime('%Y-%m-%d')
-} with just.sh version {VERSION}.
+} with just.sh version {__version__}.
 https://github.com/jstrieb/just.sh
 
 Run `./{os.path.basename(outfile_path)} --dump` to recover the original Justfile.\n\n"""
@@ -1619,7 +1627,7 @@ while [ "${{#}}" -gt 0 ]; do
     
   --version)
     shift
-    echo "just.sh {VERSION}"
+    echo "just.sh {__version__}"
     echo
     echo "https://github.com/jstrieb/just.sh"
     RUN_DEFAULT="false"
@@ -1788,7 +1796,9 @@ def cli_entrypoint() -> None:
     parsed_args = parser.parse_args()
 
     if parsed_args.version:
-        print(f"just.sh – Justfile to POSIX shell script compiler (version {VERSION})")
+        print(
+            f"just.sh – Justfile to POSIX shell script compiler (version {__version__})"
+        )
 
     logging.basicConfig(format="%(levelname)s: %(message)s")
 

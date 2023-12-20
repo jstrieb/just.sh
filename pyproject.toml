@@ -1,20 +1,30 @@
+########################################################################################
+# Build system configuration                                                           #
+########################################################################################
+
 [build-system]
-requires = ["setuptools>=61.0"]
+requires = ["setuptools >= 61.0", "setuptools_scm >= 8"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools.package-dir]
 just_sh = "just_sh"
 pyjust = "just_sh"
 
-[tool.setuptools.packages.find]
-where = ["just_sh"]
+[tool.setuptools.packages]
+find = {}
 
 [tool.setuptools.package-data]
 "*" = ["py.typed"]
 
+[tool.setuptools_scm]
+
+
+########################################################################################
+# Package metadata                                                                     #
+########################################################################################
+
 [project]
 name = "just.sh"
-version = "0.0.1"
 authors = [
     { name = "Jacob Strieb", email = "jstrieb@alumni.cmu.edu" },
 ]
@@ -40,7 +50,9 @@ requires-python = ">=3.6"
 # May be compatible with older versions
 dependencies = [ 
     "parsy >= 2.1",
+    "importlib_metadata >= 1.4 ; python_version < '3.8'"
 ]
+dynamic = ["version"]
 
 [project.optional-dependencies]
 # May be compatible with older versions
@@ -66,6 +78,11 @@ Issues = "https://github.com/jstrieb/just.sh/issues"
 just-sh = "just_sh.convert:cli_entrypoint"
 just_sh = "just_sh.convert:cli_entrypoint"
 pyjust = "just_sh.convert:cli_entrypoint"
+
+
+########################################################################################
+# Tool configuration                                                                   #
+########################################################################################
 
 [tool.ruff.lint]
 select = ["E", "F", "UP", "B", "SIM", "I"]
@@ -94,6 +111,9 @@ exclude_lines = [
     "raise NotImplementedError",
     "raise RuntimeError",
     "raise ValueError",
+
+    "except ImportError",
+    "except PackageNotFoundError",
 
     # Don't complain if non-runnable code isn't run
     "if __name__ == .__main__.:",
