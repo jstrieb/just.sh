@@ -5,7 +5,7 @@ import os.path
 import re
 import sys
 from dataclasses import dataclass
-from typing import Any, Callable, List, Optional, TextIO, Tuple, Union, cast
+from typing import Any, Callable, List, Optional, TextIO, Tuple, Type, Union, cast
 
 from parsy import (
     Parser,
@@ -520,7 +520,7 @@ def parse(data: str, verbose: bool = False) -> List[Item]:
     return cast(List[Item], justfile_parser.parse(preprocess(data)))
 
 
-def run(f: TextIO, encoder: type[json.JSONEncoder], verbose: bool = False) -> None:
+def run(f: TextIO, encoder: Type[json.JSONEncoder], verbose: bool = False) -> None:
     print(json.dumps(parse(f.read(), verbose=verbose), cls=encoder, indent=2))
 
 
