@@ -3,7 +3,8 @@
 ########################################################################################
 
 [build-system]
-requires = ["setuptools >= 59.6.0", "setuptools_scm >= 6.4.2"]
+# Latest versions that support Python 3.7
+requires = ["setuptools >= 61", "setuptools_scm >= 7"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools.package-dir]
@@ -45,7 +46,11 @@ classifiers = [
     "Typing :: Typed",
 ]
 keywords = [ "just", "justfile", "just.sh", "shell", "compiler", "POSIX", "pyjust" ]
-requires-python = ">=3.6"
+# Realistically, all of the code except for setuptools should be compatible with
+# Python 3.6. So it's probably possible to run this code on Python 3.6 if the
+# code is installed manually (without using this pyproject.toml) or run directly
+# from cloned source.
+requires-python = ">=3.7"
 # May be compatible with older versions
 dependencies = [ 
     "parsy >= 2.1",
@@ -54,15 +59,16 @@ dependencies = [
 dynamic = ["version"]
 
 [project.optional-dependencies]
-# May be compatible with older versions
+# May be compatible with older versions. Many of the versions below are the
+# latest ones that support Python 3.7.
 test = [
     # Linting
-    "black >= 23.12.0",
-    "mypy >= 1.6.1",
+    "black >= 23.3.0",
+    "mypy >= 1.4.1",
     "ruff >= 0.1.8",
     # Testing
     "pytest >= 7.4.3",
-    "coverage[toml] >= 7.3.2",
+    "coverage[toml] >= 6.5.0",
     "pytest-cov >= 4.1.0",
     "pytest-xdist >= 3.5.0",
 ]
