@@ -415,7 +415,7 @@ test default = join("one", "two", 'three'):
   echo "{{ if home_dir == home_dir_2 { "$(echo equal)" } else { "unequal!" } }}"
   echo "{{env_var_or_default('ThIs_DoEs_NoT_eXiSt', 'FAKE!!!')}}"
   echo "{{invocation_directory()}}"
-  echo "{{justfile_directory()}}+{{justfile()}} = {{justfile_directory() / justfile()}}"
+  echo "{{justfile_directory()}} + {{justfile()}} = {{justfile_directory() / justfile()}}"
   echo "Alternatively, {{justfile_directory() + justfile()}}"
   echo {{quote("I'd've should've quoted this!")}}
   echo {{uppercase(quote("I'd've should've quoted this!"))}}
@@ -1145,6 +1145,8 @@ NORMALIZE_REGEXES = [
     (re.compile(rb" +"), rb" "),
     (re.compile(rb'"'), rb"'"),
     (re.compile(rb"tmp\.[a-zA-Z0-9]+"), rb"tmp"),
+    (re.compile(rb"/var/folder[^\s]+"), rb"tmp"),  # macOS temp directories
+    (re.compile(rb"/[^\s]*tmp[^\s]+"), rb"tmp"),
     (re.compile(rb"\d{1,2}:\d{1,2}"), rb"12:00"),  # Normalize times
     (re.compile(rb"\nDid you mean[^\n]*"), rb""),
     (re.compile(rb"which wasn't expected"), rb"that wasn't expected"),

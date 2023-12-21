@@ -273,6 +273,9 @@ just_functions = {
   elif type python3 > /dev/null 2>&1; then
     python3 -c 'from hashlib import sha256; import sys; print(sha256(sys.stdin.buffer.read()).hexdigest())' \
       < "${1}"
+  elif type python > /dev/null 2>&1; then
+    python -c 'from hashlib import sha256; import sys; print sha256(sys.stdin.read()).hexdigest()' \
+      < "${1}"
   else
     echo_error "No sha256sum binary found"
     exit 1
@@ -285,6 +288,9 @@ just_functions = {
   elif type python3 > /dev/null 2>&1; then
     printf "%s" "${1}" | \
       python3 -c 'from hashlib import sha256; import sys; print(sha256(sys.stdin.buffer.read()).hexdigest())'
+  elif type python > /dev/null 2>&1; then
+    printf "%s" "${1}" | \
+      python3 -c 'from hashlib import sha256; import sys; print sha256(sys.stdin.read()).hexdigest()'
   else
     echo_error "No sha256sum binary found"
     exit 1
@@ -1463,6 +1469,45 @@ change_workdir
         return f"""
 {header_comment("Helper functions")}
 
+# Sane, portable echo that doesn't escape characters like "\\n" behind your back
+echo() {{
+  if [ "${{#}}" -gt 0 ]; then
+    printf "%s\\n" "${{@}}"
+  else
+    printf "\\n"
+  fi
+}}
+
+# realpath is a GNU coreutils extension
+realpath() {{
+  # The methods to replicate it get increasingly error-prone
+  # TODO: improve
+  if type -P realpath > /dev/null 2>&1; then
+    "$(type -P realpath)" "${{1}}"
+  elif type python3 > /dev/null 2>&1; then
+    python3 -c 'import os.path, sys; print(os.path.realpath(sys.argv[1]))' "${{1}}"
+  elif type python > /dev/null 2>&1; then
+    python -c 'import os.path, sys; print os.path.realpath(sys.argv[1])' "${{1}}"
+  elif [ -f "${{1}}" ] && ! [ -z "$(dirname "${{1}}")" ]; then
+    # We assume the directory exists. For our uses, it always does
+    echo "$(
+      cd "$(dirname "${{1}}")";
+      pwd -P
+    )/$(
+      basename "${{1}}"
+    )"
+  elif [ -f "${{1}}" ]; then
+    pwd -P
+  elif [ -d "${{1}}" ]; then
+  (
+    cd "${{1}}"
+    pwd -P
+  )
+  else
+    echo "${{1}}"
+  fi
+}}
+
 echo_error() {{
   echo "${{RED}}error${{NOCOLOR}}: ${{BOLD}}${{1}}${{NOCOLOR}}" >&2
 }}
@@ -1479,15 +1524,6 @@ recipe_error() {{
 
 echo_recipe_line() {{
   echo "${{BOLD}}${{1}}${{NOCOLOR}}" >&2
-}}
-
-# Sane, portable echo that doesn't escape characters like "\\n" behind your back
-echo() {{
-  if [ "${{#}}" -gt 0 ]; then
-    printf "%s\\n" "${{@}}"
-  else
-    printf "\\n"
-  fi
 }}
             
 set_var() {{
