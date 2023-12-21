@@ -1707,9 +1707,13 @@ EOF
     break
     ;;
 
-  *)
-    echo_error "Found argument '${{YELLOW}}${{1}}${{NOCOLOR}}' that wasn't expected, or isn't valid in this context"
+  -*)
+    echo_error "Found argument '${{NOCOLOR}}${{YELLOW}}${{1}}${{NOCOLOR}}${{BOLD}}' that wasn't expected, or isn't valid in this context"
     # TODO: Print usage/--help
+    exit 1
+    ;;
+  *)
+    echo_error 'Justfile does not contain recipe `'"${{1}}"'`.'
     exit 1
     ;;
   esac
