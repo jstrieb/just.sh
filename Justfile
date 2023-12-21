@@ -1,6 +1,6 @@
 REQUIRED_COVERAGE := "100"
 
-test cores="auto": lint-python
+test cores="auto":
     python3 -m pytest \
       -n {{cores}} \
       --failed-first \
