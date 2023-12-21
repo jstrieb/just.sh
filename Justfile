@@ -19,6 +19,11 @@ alias lint := lint-python
 
 lint-python:
     black .
-    mypy .
+    mypy test/ just_sh/
+    ruff check --fix .
+
+check:
+    black --check --diff --color .
+    mypy test/ just_sh/
     ruff check .
 
