@@ -1712,7 +1712,9 @@ EOF
     # TODO: Print usage/--help
     exit 1
     ;;
+
   *)
+    assign_variables || exit "${{?}}"
     echo_error 'Justfile does not contain recipe `'"${{1}}"'`.'
     exit 1
     ;;

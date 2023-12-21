@@ -13,7 +13,7 @@ test cores="auto":
       --fail-under {{ REQUIRED_COVERAGE }}
 
 first-fail:
-    python3 -m pytest --failed-first -x test/test.py
+    python3 -m pytest -v --failed-first -x test/test.py
 
 alias lint := lint-python
 

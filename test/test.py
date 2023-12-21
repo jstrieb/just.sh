@@ -34,6 +34,9 @@ def permuted_combinations(fixed: Any, *args: Any, fix_first: bool = False) -> Li
 
 FLAG_COMBOS = [
     [],
+    ["invalid_arg"],
+    ["-z"],
+    ["--invalid-flag"],
     *permuted_combinations("--summary", "--unsorted", fix_first=True),
     *[
         combo
@@ -1135,14 +1138,17 @@ def test_evalute_without_quoting() -> None:
 
 
 NORMALIZE_REGEXES = [
-    (re.compile(rb"(\./)?just\.sh"), b"just"),
-    (re.compile(rb"Justfile"), b"just"),
-    (re.compile(rb"on line \d+"), b""),
-    (re.compile(rb" +"), b" "),
+    (re.compile(rb"(\./)?just\.sh"), rb"just"),
+    (re.compile(rb"Justfile"), rb"just"),
+    (re.compile(rb"on line \d+"), rb""),
+    (re.compile(rb"line \d+"), rb"line 0"),
+    (re.compile(rb" +"), rb" "),
     (re.compile(rb'"'), rb"'"),
     (re.compile(rb"tmp\.[a-zA-Z0-9]+"), rb"tmp"),
     (re.compile(rb"\d{1,2}:\d{1,2}"), rb"12:00"),  # Normalize times
     (re.compile(rb"\nDid you mean[^\n]*"), rb""),
+    (re.compile(rb"which wasn't expected"), rb"that wasn't expected"),
+    (re.compile(rb"\n\nUSAGE:\n(.+|\n+)+"), rb""),
     (
         re.compile(rb"(\s*-->[^\n]*\n)?\s*\|[^\n]*\n\s*\d*?\s*\|[^\n]*\n\s*\|[^\n]*"),
         rb"",
