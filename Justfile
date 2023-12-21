@@ -4,6 +4,7 @@ test cores="auto":
     python3 -m pytest \
       -n {{cores}} \
       --failed-first \
+      --color yes \
       --cov-config .coveragerc \
       --cov-report html \
       --cov . \
