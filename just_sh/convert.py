@@ -1799,6 +1799,7 @@ def cli_entrypoint() -> None:
         print(
             f"just.sh – Justfile to POSIX shell script compiler (version {__version__})"
         )
+        return
 
     logging.basicConfig(format="%(levelname)s: %(message)s")
 
