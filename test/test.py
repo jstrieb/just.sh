@@ -77,23 +77,22 @@ def run_justfile(args: Iterable[str]) -> None:
     assert reference_run.returncode == script_run.returncode
 
 
-@pytest.mark.parametrize(
-    "args, justfile_content",
-    pair_args_justfile(
-        # Simplest possible Justfile
-        (
-            """
+# Store in a variable outside of the decorator to avoid MASSIVE backtraces
+paired_args_justfiles = pair_args_justfile(
+    # Simplest possible Justfile
+    (
+        """
 simple:
     echo Simple!
 """,
-            [
-                ["simple"],
-            ],
-        ),
-        # Default recipes
-        # https://just.systems/man/en/chapter_21.html
-        (
-            """
+        [
+            ["simple"],
+        ],
+    ),
+    # Default recipes
+    # https://just.systems/man/en/chapter_21.html
+    (
+        """
 default: lint build test
 
 build:
@@ -105,21 +104,21 @@ test:
 lint:
   echo Linting…
 """,
-            permuted_combinations("default", "build", "test", "lint", fix_first=True),
-        ),
-        (
-            """
+        permuted_combinations("default", "build", "test", "lint", fix_first=True),
+    ),
+    (
+        """
 default:
   just --list
 """,
-            [
-                ["default"],
-            ],
-        ),
-        # Aliases
-        # https://just.systems/man/en/chapter_23.html
-        (
-            """
+        [
+            ["default"],
+        ],
+    ),
+    # Aliases
+    # https://just.systems/man/en/chapter_23.html
+    (
+        """
 alias d := build
 
 lint:
@@ -136,16 +135,16 @@ alias a := build
 test2:
   echo 'Test2'
 """,
-            permuted_combinations(
-                "d",
-                "lint",
-                "b",
-                "build",
-                "test2",
-            ),
+        permuted_combinations(
+            "d",
+            "lint",
+            "b",
+            "build",
+            "test2",
         ),
-        (
-            """
+    ),
+    (
+        """
 run args:
   echo {{args}}
 
@@ -159,21 +158,19 @@ run2 arg1 arg2 default="val":
 alias r := run
 alias r2 := run2
 """,
-            [
-                ["run", "arg"],
-                ["run", "some arguments here!"],
-                ["r", "arg"],
-                ["r", "some arguments here!"],
-                *permuted_combinations(
-                    ("run2", "arg2", "arg3"), "extra", fix_first=True
-                ),
-                *permuted_combinations(("r2", "arg2", "arg3"), "extra", fix_first=True),
-            ],
-        ),
-        # Settings
-        # https://just.systems/man/en/chapter_24.html
-        (
-            """
+        [
+            ["run", "arg"],
+            ["run", "some arguments here!"],
+            ["r", "arg"],
+            ["r", "some arguments here!"],
+            *permuted_combinations(("run2", "arg2", "arg3"), "extra", fix_first=True),
+            *permuted_combinations(("r2", "arg2", "arg3"), "extra", fix_first=True),
+        ],
+    ),
+    # Settings
+    # https://just.systems/man/en/chapter_24.html
+    (
+        """
 set shell := ["bash", "-c", "-u"]
 
 foo:
@@ -197,10 +194,10 @@ a := "hello"
   echo $a
   @echo $b
 """,
-            permuted_combinations("foo", "bar", ("baz", "goodbye")),
-        ),
-        (
-            """
+        permuted_combinations("foo", "bar", ("baz", "goodbye")),
+    ),
+    (
+        """
 set positional-arguments
 
 @foo bar:
@@ -220,28 +217,28 @@ test2 arg1 +restargs="more args":
   echo '{{arg1}}!'
   bash -c 'while (( "$#" )); do echo - $1; shift; done' -- "$@"
 """,
-            [
-                ["foo", "hello"],
-                *permuted_combinations(
-                    ("foo", "hello", "test"), "first", "second", "third", fix_first=True
-                ),
-                *permuted_combinations(
-                    ("foo", "hello", "test2", "zeroth"),
-                    "first",
-                    "second",
-                    "third",
-                    fix_first=True,
-                ),
-                *permuted_combinations(
-                    "test", "first", "second", "third", "fourth", fix_first=True
-                ),
-                *permuted_combinations(
-                    "test2", "first", "second", "third", "fourth", fix_first=True
-                ),
-            ],
-        ),
-        (
-            """
+        [
+            ["foo", "hello"],
+            *permuted_combinations(
+                ("foo", "hello", "test"), "first", "second", "third", fix_first=True
+            ),
+            *permuted_combinations(
+                ("foo", "hello", "test2", "zeroth"),
+                "first",
+                "second",
+                "third",
+                fix_first=True,
+            ),
+            *permuted_combinations(
+                "test", "first", "second", "third", "fourth", fix_first=True
+            ),
+            *permuted_combinations(
+                "test2", "first", "second", "third", "fourth", fix_first=True
+            ),
+        ],
+    ),
+    (
+        """
 # use python3 to execute recipe lines and backticks
 set shell := ["python3", "-c" ] 
 set tempdir := "/tmp/" 
@@ -253,28 +250,28 @@ foo:
   print("Snake snake snake snake.")
   print("{{foos}}")
 """,
-            # TODO: Change argument parsing loop to parse flags first, then
-            #  recipes. Until then, permutations where variable setting happens
-            #  after the recipes succeed when they should fail.
-            # permuted_combinations(
-            #     "foo",
-            #     ("--set", "foos", "ro dah"),
-            #     "foos=DDDDDDDDD",
-            # ),
-            [
-                ["foo"],
-                ["--set", "foos", "ro dah"],
-                ["--set", "foos", "ro dah", "foo"],
-                ["foos=DDDDDDDDDD"],
-                ["foos=DDDDDDDDDD", "foo"],
-                ["--set", "foos", "ro dah", "foos=DDDDDDDDDD"],
-                ["--set", "foos", "ro dah", "foos=DDDDDDDDDD", "foo"],
-            ],
-        ),
-        # Documentation comments
-        # https://just.systems/man/en/chapter_25.html
-        (
-            """
+        # TODO: Change argument parsing loop to parse flags first, then
+        #  recipes. Until then, permutations where variable setting happens
+        #  after the recipes succeed when they should fail.
+        # permuted_combinations(
+        #     "foo",
+        #     ("--set", "foos", "ro dah"),
+        #     "foos=DDDDDDDDD",
+        # ),
+        [
+            ["foo"],
+            ["--set", "foos", "ro dah"],
+            ["--set", "foos", "ro dah", "foo"],
+            ["foos=DDDDDDDDDD"],
+            ["foos=DDDDDDDDDD", "foo"],
+            ["--set", "foos", "ro dah", "foos=DDDDDDDDDD"],
+            ["--set", "foos", "ro dah", "foos=DDDDDDDDDD", "foo"],
+        ],
+    ),
+    # Documentation comments
+    # https://just.systems/man/en/chapter_25.html
+    (
+        """
 # build stuff
 build: 
   echo ./bin/build 
@@ -283,12 +280,12 @@ build:
 test:
   echo ./bin/test >&2
 """,
-            permuted_combinations("build", "test"),
-        ),
-        # Variables and substitution
-        # https://just.systems/man/en/chapter_27.html
-        (
-            """
+        permuted_combinations("build", "test"),
+    ),
+    # Variables and substitution
+    # https://just.systems/man/en/chapter_27.html
+    (
+        """
 tmpdir  := `mktemp -d`
 version := "0.2.7"
 tardir  := tmpdir / "awesomesauce-" + version
@@ -322,25 +319,23 @@ braces2:
 braces3:
   echo 'I {{ "{{" }}LOVE}} curly braces!'
 """,
-            [
-                *permuted_combinations(
-                    "readme", "publish", "braces", "braces2", "braces3"
-                ),
-                ["--evaluate", "tmpdir"],
-                ["--evaluate", "version"],
-                ["--evaluate", "tardir"],
-                ["--evaluate", "tarball"],
-                ["--evaluate", "foo"],
-                ["--evaluate", "foo2"],
-                ["--evaluate", "bar"],
-                ["--evaluate", "foo3"],
-                ["--evaluate", "nonexist"],
-            ],
-        ),
-        # Strings
-        # https://just.systems/man/en/chapter_28.html
-        (
-            r"""
+        [
+            *permuted_combinations("readme", "publish", "braces", "braces2", "braces3"),
+            ["--evaluate", "tmpdir"],
+            ["--evaluate", "version"],
+            ["--evaluate", "tardir"],
+            ["--evaluate", "tarball"],
+            ["--evaluate", "foo"],
+            ["--evaluate", "foo2"],
+            ["--evaluate", "bar"],
+            ["--evaluate", "foo3"],
+            ["--evaluate", "nonexist"],
+        ],
+    ),
+    # Strings
+    # https://just.systems/man/en/chapter_28.html
+    (
+        r"""
 string-with-tab             := "\t"
 string-with-newline         := "\n"
 string-with-carriage-return := "\r"
@@ -364,7 +359,7 @@ x := '''
 
 # this string will evaluate to `abc\n  wuv\nbar\n`
 y := """
-            + '''"""
+        + '''"""
   abc
     wuv
   xyz
@@ -375,36 +370,36 @@ z := """testing"""
 recipe:
   @just --evaluate
 ''',
-            [
-                ["recipe"],
-                ["--evaluate", "string-with-tab"],
-                ["--evaluate", "string-with-newline"],
-                ["--evaluate", "string-with-carriage-return"],
-                ["--evaluate", "string-with-double-quote"],
-                ["--evaluate", "string-with-slash"],
-                ["--evaluate", "string-with-no-newline"],
-                ["--evaluate", "single"],
-                ["--evaluate", "double"],
-                ["--evaluate", "escapes"],
-                ["--evaluate", "x"],
-                ["--evaluate", "y"],
-                ["--evaluate", "z"],
-            ],
-        ),
-        # Ignoring errors
-        # https://just.systems/man/en/chapter_29.html
-        (
-            r"""
+        [
+            ["recipe"],
+            ["--evaluate", "string-with-tab"],
+            ["--evaluate", "string-with-newline"],
+            ["--evaluate", "string-with-carriage-return"],
+            ["--evaluate", "string-with-double-quote"],
+            ["--evaluate", "string-with-slash"],
+            ["--evaluate", "string-with-no-newline"],
+            ["--evaluate", "single"],
+            ["--evaluate", "double"],
+            ["--evaluate", "escapes"],
+            ["--evaluate", "x"],
+            ["--evaluate", "y"],
+            ["--evaluate", "z"],
+        ],
+    ),
+    # Ignoring errors
+    # https://just.systems/man/en/chapter_29.html
+    (
+        r"""
 foo:
   -cat foo
   echo 'Done!'
 """,
-            permuted_combinations("foo"),
-        ),
-        # Functions
-        # https://just.systems/man/en/chapter_30.html
-        (
-            r"""
+        permuted_combinations("foo"),
+    ),
+    # Functions
+    # https://just.systems/man/en/chapter_30.html
+    (
+        r"""
 system-info:
   @echo "This is an {{arch()}} machine ({{os()}} => {{os_family()}})".
   echo "{{home_dir}} {{home_dir_2}}"
@@ -461,24 +456,24 @@ try-hash filename=to-hash: (make-file filename)
 
 
 """,
-            [
-                *permuted_combinations(
-                    "system-info",
-                    ("test", "default"),
-                    "should_fail",
-                    ("try-hash", f"/tmp/tmp.{random.randint(0, 10000)}"),
-                ),
-                ["try-hash"],
-                ["test"],
-                ["--evaluate", "home_dir"],
-                ["--evaluate", "home_dir_2"],
-                ["--evaluate", "to-hash"],
-            ],
-        ),
-        # Recipe Attributes
-        # https://just.systems/man/en/chapter_31.html
-        (
-            r"""
+        [
+            *permuted_combinations(
+                "system-info",
+                ("test", "default"),
+                "should_fail",
+                ("try-hash", f"/tmp/tmp.{random.randint(0, 10000)}"),
+            ),
+            ["try-hash"],
+            ["test"],
+            ["--evaluate", "home_dir"],
+            ["--evaluate", "home_dir_2"],
+            ["--evaluate", "to-hash"],
+        ],
+    ),
+    # Recipe Attributes
+    # https://just.systems/man/en/chapter_31.html
+    (
+        r"""
 [no-cd]
 [private]
 foo:
@@ -524,25 +519,25 @@ alias _b := test
 alias c := bar
 
 """,
-            [
-                ["a"],
-                ["_b"],
-                ["c"],
-                *permuted_combinations(
-                    "foo",
-                    "bar",
-                    "baz",
-                    "test",
-                    "test2",
-                    "run",
-                    "_priv",
-                ),
-            ],
-        ),
-        # Command evaluation with backticks
-        # https://just.systems/man/en/chapter_32.html
-        (
-            r"""
+        [
+            ["a"],
+            ["_b"],
+            ["c"],
+            *permuted_combinations(
+                "foo",
+                "bar",
+                "baz",
+                "test",
+                "test2",
+                "run",
+                "_priv",
+            ),
+        ],
+    ),
+    # Command evaluation with backticks
+    # https://just.systems/man/en/chapter_32.html
+    (
+        r"""
 export VAR := "value that should not appear in backticks"
 
 bullets := `echo "this is a test" | tr ' ' '\n' | sed 's/^/- /'`
@@ -572,19 +567,19 @@ echo should
     echo work 
     ```}}'
     echo {{VAR}}""",
-            [
-                ["--evaluate", "bullets"],
-                ["--evaluate", "stuff"],
-                ["--evaluate", "dedented"],
-                ["--evaluate", "VAR"],
-                ["--evaluate", "unbound"],
-                ["echo"],
-            ],
-        ),
-        # Conditional expressions
-        # https://just.systems/man/en/chapter_33.html
-        (
-            r"""
+        [
+            ["--evaluate", "bullets"],
+            ["--evaluate", "stuff"],
+            ["--evaluate", "dedented"],
+            ["--evaluate", "VAR"],
+            ["--evaluate", "unbound"],
+            ["echo"],
+        ],
+    ),
+    # Conditional expressions
+    # https://just.systems/man/en/chapter_33.html
+    (
+        r"""
 foo := if "2" == "2" { "Good!" } else { "1984" }
 
 bar:
@@ -607,20 +602,20 @@ foo6 := if "hello" == "goodbye" {
   "123"
 }
 """,
-            [
-                ["--evaluate", "foo"],
-                ["--evaluate", "foo2"],
-                ["--evaluate", "foo3"],
-                ["--evaluate", "foo4"],
-                ["--evaluate", "foo6"],
-                *permuted_combinations("bar", ("bar5", "test")),
-                *permuted_combinations("bar", ("bar5", "bar")),
-            ],
-        ),
-        # Stopping execution with error
-        # https://just.systems/man/en/chapter_34.html
-        (
-            r"""
+        [
+            ["--evaluate", "foo"],
+            ["--evaluate", "foo2"],
+            ["--evaluate", "foo3"],
+            ["--evaluate", "foo4"],
+            ["--evaluate", "foo6"],
+            *permuted_combinations("bar", ("bar5", "test")),
+            *permuted_combinations("bar", ("bar5", "bar")),
+        ],
+    ),
+    # Stopping execution with error
+    # https://just.systems/man/en/chapter_34.html
+    (
+        r"""
 foo := if "hello" == "goodbye" { 
   "xyz"  
 } else if "a" == "b" { 
@@ -631,15 +626,15 @@ foo := if "hello" == "goodbye" {
 
 undefined := env_var("NONEXIST_UNDEFINED")
 """,
-            [
-                ["--evaluate", "foo"],
-                ["--evaluate", "undefined"],
-            ],
-        ),
-        # Setting variables from the command line
-        # https://just.systems/man/en/chapter_35.html
-        (
-            r"""
+        [
+            ["--evaluate", "foo"],
+            ["--evaluate", "undefined"],
+        ],
+    ),
+    # Setting variables from the command line
+    # https://just.systems/man/en/chapter_35.html
+    (
+        r"""
 os := "linux"
 
 test: build
@@ -648,28 +643,28 @@ test: build
 build:
   echo ./build {{os}}
 """,
-            [
-                ["--evaluate", "os"],
-                *[
-                    combo + ["test"]
-                    for combo in permuted_combinations(
-                        ("--set", "os", "plan9"),
-                        "os=Free BSD",
-                    )
-                ],
-                *[
-                    combo + ["build"]
-                    for combo in permuted_combinations(
-                        ("--set", "os", "plan9"),
-                        "os=Free BSD",
-                    )
-                ],
+        [
+            ["--evaluate", "os"],
+            *[
+                combo + ["test"]
+                for combo in permuted_combinations(
+                    ("--set", "os", "plan9"),
+                    "os=Free BSD",
+                )
             ],
-        ),
-        # Environment variables
-        # https://just.systems/man/en/chapter_36.html
-        (
-            r"""
+            *[
+                combo + ["build"]
+                for combo in permuted_combinations(
+                    ("--set", "os", "plan9"),
+                    "os=Free BSD",
+                )
+            ],
+        ],
+    ),
+    # Environment variables
+    # https://just.systems/man/en/chapter_36.html
+    (
+        r"""
 export RUST_BACKTRACE := "1" 
 
 test:
@@ -689,32 +684,32 @@ a $A $B=`echo $A`:
 print_home_folder:
   echo "HOME is: '${HOME}'"
 """,
-            [
-                ["--evaluate", "RUST_BACKTRACE"],
-                ["--evaluate", "WORLD"],
-                ["--evaluate", "BAR"],
-                ["a", "foo"],
-                ["toast"],
-                ["toast", "3", "a", "foo"],
-                *permuted_combinations(
-                    ("a", "foo", "bar"), "test", "print_home_folder", ("toast", "0")
-                ),
-            ],
-        ),
-        # Recipe Parameters
-        # https://just.systems/man/en/chapter_37.html
-        (
-            r"""
+        [
+            ["--evaluate", "RUST_BACKTRACE"],
+            ["--evaluate", "WORLD"],
+            ["--evaluate", "BAR"],
+            ["a", "foo"],
+            ["toast"],
+            ["toast", "3", "a", "foo"],
+            *permuted_combinations(
+                ("a", "foo", "bar"), "test", "print_home_folder", ("toast", "0")
+            ),
+        ],
+    ),
+    # Recipe Parameters
+    # https://just.systems/man/en/chapter_37.html
+    (
+        r"""
 default: (build "main")
 
 build target:
   @echo 'Building {{target}}…'
   cd {{target}} && echo make
 """,
-            permuted_combinations(("build", "my-awesome-project"), "default"),
-        ),
-        (
-            r"""
+        permuted_combinations(("build", "my-awesome-project"), "default"),
+    ),
+    (
+        r"""
 target := "main"
 
 _build version:
@@ -723,65 +718,65 @@ _build version:
 
 build: (_build target)
 """,
-            [
-                ["--set", "target", "my-awesome-project"],
-                ["--set", "target", "my-awesome-project", "_build", "the_project"],
-                *permuted_combinations("build", ("_build", "proj")),
-            ],
-        ),
-        (
-            r"""
+        [
+            ["--set", "target", "my-awesome-project"],
+            ["--set", "target", "my-awesome-project", "_build", "the_project"],
+            *permuted_combinations("build", ("_build", "proj")),
+        ],
+    ),
+    (
+        r"""
 build target:
   @echo "Building {{target}}…"
 
 push target: (build target)
   @echo 'Pushing {{target}}…'
 """,
-            permuted_combinations(("build", "proj"), ("push", "notproj")),
-        ),
-        (
-            r"""
+        permuted_combinations(("build", "proj"), ("push", "notproj")),
+    ),
+    (
+        r"""
 default := 'all'
 
 test target tests=default:
   @echo 'Testing {{target}}:{{tests}}…'
   echo ./test --tests {{tests}} {{target}}
 """,
-            [
-                ["--evaluate", "default"],
-                ["test"],
-                ["test", "faketarget"],
-                ["test", "faketarget2", "the tests"],
-                ["--set", "default", "notall", "test", "faketarget2", "the tests"],
-                ["--set", "default", "notall", "test", "faketarget2"],
-                ["--set", "default", "notall", "test"],
-                ["default=some", "test", "faketarget2", "the tests"],
-                ["default=some", "test", "faketarget2"],
-                ["default=some", "test"],
-            ],
-        ),
-        (
-            r"""
+        [
+            ["--evaluate", "default"],
+            ["test"],
+            ["test", "faketarget"],
+            ["test", "faketarget2", "the tests"],
+            ["--set", "default", "notall", "test", "faketarget2", "the tests"],
+            ["--set", "default", "notall", "test", "faketarget2"],
+            ["--set", "default", "notall", "test"],
+            ["default=some", "test", "faketarget2", "the tests"],
+            ["default=some", "test", "faketarget2"],
+            ["default=some", "test"],
+        ],
+    ),
+    (
+        r"""
 arch := "wasm"
 
 test triple=(arch + "-unknown-unknown") input=(arch / "input.dat"):
   echo ./test {{triple}}
 """,
-            [
-                ["--evaluate", "arch"],
-                ["test"],
-                ["test", "faketarget"],
-                ["test", "faketarget2", "fakeinput"],
-                ["--set", "arch", "winders", "test"],
-                ["--set", "arch", "winders", "test", "faketarget2"],
-                ["--set", "arch", "winders", "test", "faketarget2", "the input"],
-                ["arch=some", "test"],
-                ["arch=some", "test", "faketarget2"],
-                ["arch=some", "test", "faketarget2", "the input"],
-            ],
-        ),
-        (
-            r"""
+        [
+            ["--evaluate", "arch"],
+            ["test"],
+            ["test", "faketarget"],
+            ["test", "faketarget2", "fakeinput"],
+            ["--set", "arch", "winders", "test"],
+            ["--set", "arch", "winders", "test", "faketarget2"],
+            ["--set", "arch", "winders", "test", "faketarget2", "the input"],
+            ["arch=some", "test"],
+            ["arch=some", "test", "faketarget2"],
+            ["arch=some", "test", "faketarget2", "the input"],
+        ],
+    ),
+    (
+        r"""
 backup +FILES:
   printf "%s\n" scp {{FILES}} me@server.com:
   
@@ -797,34 +792,34 @@ search QUERY:
 foo $bar:
   echo $bar
 """,
-            [
-                ["backup"],
-                ["backup", "file"],
-                ["backup", "file", "file2"],
-                ["backup", "file", "file2", "file3"],
-                ["commit"],
-                ["commit", "msg"],
-                ["commit", "msg", "flag1"],
-                ["commit", "msg", "flag1", "flag2"],
-                ["commit", "msg", "flag1", "flag2", "flag3"],
-                ["commit", "the message", "backup", "file1", "file2"],
-                ["backup", "file1", "file2", "commit", "the message"],
-                ["test"],
-                ["test", "flag1"],
-                ["test", "flag1", "flag2"],
-                ["test", "flag1", "flag2", "flag3"],
-                ["search"],
-                ["search", "query"],
-                ["search", "multi word query"],
-                ["foo"],
-                ["foo", "thebar"],
-                ["foo", "barbar", "backup", "file"],
-            ],
-        ),
-        # Running recipes at the end of a recipe
-        # https://just.systems/man/en/chapter_38.html
-        (
-            r"""
+        [
+            ["backup"],
+            ["backup", "file"],
+            ["backup", "file", "file2"],
+            ["backup", "file", "file2", "file3"],
+            ["commit"],
+            ["commit", "msg"],
+            ["commit", "msg", "flag1"],
+            ["commit", "msg", "flag1", "flag2"],
+            ["commit", "msg", "flag1", "flag2", "flag3"],
+            ["commit", "the message", "backup", "file1", "file2"],
+            ["backup", "file1", "file2", "commit", "the message"],
+            ["test"],
+            ["test", "flag1"],
+            ["test", "flag1", "flag2"],
+            ["test", "flag1", "flag2", "flag3"],
+            ["search"],
+            ["search", "query"],
+            ["search", "multi word query"],
+            ["foo"],
+            ["foo", "thebar"],
+            ["foo", "barbar", "backup", "file"],
+        ],
+    ),
+    # Running recipes at the end of a recipe
+    # https://just.systems/man/en/chapter_38.html
+    (
+        r"""
 a:
   echo 'A!'
 
@@ -837,18 +832,18 @@ c: && d
 d: a
   echo 'D!'
 """,
-            [
-                list(combo)
-                for combo in {
-                    tuple(combo)
-                    for combo in permuted_combinations(*(["a", "b", "c", "d"] * 2))
-                }
-            ],
-        ),
-        # Running recipes in the middle of a recipe
-        # https://just.systems/man/en/chapter_39.html
-        (
-            r"""
+        [
+            list(combo)
+            for combo in {
+                tuple(combo)
+                for combo in permuted_combinations(*(["a", "b", "c", "d"] * 2))
+            }
+        ],
+    ),
+    # Running recipes in the middle of a recipe
+    # https://just.systems/man/en/chapter_39.html
+    (
+        r"""
 a:
   echo 'A!'
 
@@ -860,18 +855,17 @@ b: a
 c:
   echo 'C!'
 """,
-            [
-                list(combo)
-                for combo in {
-                    tuple(combo)
-                    for combo in permuted_combinations(*(["a", "b", "c"] * 2))
-                }
-            ],
-        ),
-        # Shebang recipes
-        # https://just.systems/man/en/chapter_40.html
-        (
-            r"""
+        [
+            list(combo)
+            for combo in {
+                tuple(combo) for combo in permuted_combinations(*(["a", "b", "c"] * 2))
+            }
+        ],
+    ),
+    # Shebang recipes
+    # https://just.systems/man/en/chapter_40.html
+    (
+        r"""
 polyglot: (python "some args" ("python" / "ic")) js perl sh ruby 
 
 python arg1 arg2:
@@ -896,19 +890,19 @@ ruby:
   #!/usr/bin/env ruby
   puts "Hello from ruby!"
 """,
-            permuted_combinations(
-                "polyglot",
-                ("python", "some args", "python/ic"),
-                "js",
-                "perl",
-                "sh",
-                "ruby",
-            ),
+        permuted_combinations(
+            "polyglot",
+            ("python", "some args", "python/ic"),
+            "js",
+            "perl",
+            "sh",
+            "ruby",
         ),
-        # Changing the working directory
-        # https://just.systems/man/en/chapter_44.html
-        (
-            r"""
+    ),
+    # Changing the working directory
+    # https://just.systems/man/en/chapter_44.html
+    (
+        r"""
 foo:
   pwd    # This `pwd` will print the same directory… 
   cd ..
@@ -923,16 +917,16 @@ foo3:
   cd /
   pwd
 """,
-            permuted_combinations(
-                "foo",
-                "foo2",
-                "foo3",
-            ),
+        permuted_combinations(
+            "foo",
+            "foo2",
+            "foo3",
         ),
-        # Private recipes
-        # https://just.systems/man/en/chapter_48.html
-        (
-            r"""
+    ),
+    # Private recipes
+    # https://just.systems/man/en/chapter_48.html
+    (
+        r"""
 test: _test-helper
   echo ./bin/test
 
@@ -947,12 +941,12 @@ alias b := bar
 
 bar:
 """,
-            permuted_combinations("test", "_test-helper", "foo", "b", "bar"),
-        ),
-        # Quiet recipes
-        # https://just.systems/man/en/chapter_49.html
-        (
-            r"""
+        permuted_combinations("test", "_test-helper", "foo", "b", "bar"),
+    ),
+    # Quiet recipes
+    # https://just.systems/man/en/chapter_49.html
+    (
+        r"""
 @quiet:
   echo hello
   echo goodbye
@@ -973,11 +967,11 @@ git *args:
 git2 *args:
     @git {{args}}
 """,
-            permuted_combinations("quiet", "foo", "bar", "git", "git2"),
-        ),
-        # Misc. tests for coverage
-        (
-            r"""
+        permuted_combinations("quiet", "foo", "bar", "git", "git2"),
+    ),
+    # Misc. tests for coverage
+    (
+        r"""
 # This comment logs a message that comments will be moved around
 var_name := if invocation_directory_native() != / "tmp" { "not tmp" } else { "tmp" }
 var-name := if just_executable() == / "usr" + ("/local" / "bin") { "is folder...?" } else { "expected" }
@@ -986,15 +980,15 @@ echo in=(if just_executable() =~ "just" { "Matches!" } else { "No match!" }):
     echo {{ if var-name == var_name { "uh oh" } else { "nice" } }}
     echo {{ in }}
 """,
-            [
-                ["--evaluate", "var-name"],
-                ["--evaluate", "var_name"],
-                ["echo"],
-                ["echo", "🤔"],
-            ],
-        ),
-        (
-            r"""
+        [
+            ["--evaluate", "var-name"],
+            ["--evaluate", "var_name"],
+            ["echo"],
+            ["echo", "🤔"],
+        ],
+    ),
+    (
+        r"""
 set positional-arguments
 
 # The recipe below has some indented newlines and some empty newlines. It is 
@@ -1021,18 +1015,18 @@ python3 $default=(
 list:  
     just --list 
 """,
-            [
-                ["python3"],
-                ["python3", "$default"],
-                ["list"],
-                ["list", "python3"],
-                ["list", "python3", "$default"],
-                ["python3", "list"],
-                ["python3", "$default", "list"],
-            ],
-        ),
-        (
-            r"""
+        [
+            ["python3"],
+            ["python3", "$default"],
+            ["list"],
+            ["list", "python3"],
+            ["list", "python3", "$default"],
+            ["python3", "list"],
+            ["python3", "$default", "list"],
+        ],
+    ),
+    (
+        r"""
 set export 
 
 big-multiline_var := ```
@@ -1059,17 +1053,22 @@ empty arg="default":
 [unix]
 empty arg="nondefault": 
 """,
-            [
-                ["--evaluate", "big-multiline_var"],
-                ["first-dep"],
-                ["first-dep", "with-args"],
-                ["first-dep", "with-args", "the arg"],
-                ["with-args", "first-dep"],
-                ["with-args", "the arg", "first-dep"],
-            ],
-        ),
-        reverse=False,
+        [
+            ["--evaluate", "big-multiline_var"],
+            ["first-dep"],
+            ["first-dep", "with-args"],
+            ["first-dep", "with-args", "the arg"],
+            ["with-args", "first-dep"],
+            ["with-args", "the arg", "first-dep"],
+        ],
     ),
+    reverse=False,
+)
+
+
+@pytest.mark.parametrize(
+    "args, justfile_content",
+    paired_args_justfiles,
 )
 def test_justfile(args: List[str], justfile_content: str, tmpdir: Any) -> None:
     chdir(justfile_content, tmpdir)
