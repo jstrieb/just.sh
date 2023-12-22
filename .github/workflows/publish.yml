@@ -14,11 +14,8 @@ defaults:
     shell: bash -euxo pipefail {0}
 
 jobs:
-  test:
-    uses: ./.github/workflows/test.yml
   build-packages:
     name: Build distribution packages
-    needs: test
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
