@@ -1434,11 +1434,11 @@ change_workdir
     def evaluate_fn() -> str:
         if compiler_state.variables:
             max_len = max(len(k) for k in compiler_state.variables)
-            echo_variables = "    \n".join(
+            echo_variables = "\n    ".join(
                 f"echo '{spaced_var_name(name, max_len)}'"
                 for name in sorted(compiler_state.variables.keys())
             )
-            variable_cases = "    \n".join(
+            variable_cases = "\n    ".join(
                 match_variable_case(name) for name in compiler_state.variables
             )
         else:

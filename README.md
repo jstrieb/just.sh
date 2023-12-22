@@ -47,7 +47,7 @@ I like tools that effectively achieve one well-defined goal, without growing
 indefinitely. My hope is for `just.sh` to be such a tool.
 
 In other words, `just.sh` is "complete" software. I will fix bugs and make
-changes to matinain compatibility with `just`, but there are no new features 
+changes to maintain compatibility with `just`, but there are no new features 
 planned. 
 
 As such, even if there are no recent commits, the project is not dead! Few
@@ -81,6 +81,9 @@ files (plus one more for tests), and every line of code is covered by tests.
 - `import`, `[confirm]`, and possibly some other recent features from Just
   versions greater than 1.14.0 may not yet be supported
 - The `./just.sh --dump` command does not reformat Justfiles
+- The tests check colorless output of `just.sh` against `just`. They do not
+  confirm that the colors and ANSI escape sequences are the same between the
+  two
   
 # Acknowledgments
 
