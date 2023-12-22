@@ -1,0 +1,120 @@
+name: Publish just.sh
+
+on:
+  push:
+    tags:
+      - '*.*.*'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash -euxo pipefail {0}
+
+jobs:
+  test:
+    uses: ./.github/workflows/test.yml
+  build-packages:
+    name: Build distribution packages
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      - name: Install build dependencies
+        run: |
+          python3 -m pip install --upgrade build twine
+      - name: Build distributions and wheels
+        run: |
+          python3 -m build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: package-distributions
+          path: dist/
+  push-test-pypi:
+    name: Push to Test PyPI
+    needs: build-packages
+    runs-on: ubuntu-latest
+    environment:
+      name: test-pypi
+      url: https://test.pypi.org/p/just.sh
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: package-distributions
+          path: dist/
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          repository-url: https://test.pypi.org/legacy/
+  test-test-pypi:
+    name: Test packages on Test PyPI
+    needs: push-test-pypi
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      - name: Install package from Test PyPI
+        run: |
+          python3 -m pip install \
+            --index-url https://test.pypi.org/simple/ \
+            --extra-index-url https://pypi.org/simple/ \
+            just.sh[test]
+      - name: Install Just on Linux
+        run: |
+          curl -L "https://github.com/casey/just/releases/download/1.17.0/just-1.17.0-x86_64-unknown-linux-musl.tar.gz" \
+            | sudo tar -C /usr/local/bin -xzv just
+      - name: Run tests
+        run: |
+          # Remove conflicting local pacakge
+          rm -rf just_sh/
+          just test
+  push-pypi:
+    name: Push to PyPI
+    needs: test-test-pypi
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/p/just.sh
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: package-distributions
+          path: dist/
+      - uses: pypa/gh-action-pypi-publish@release/v1
+  test-pypi:
+    name: Test packages on PyPI
+    needs: push-pypi
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      - name: Install package from PyPI
+        run: |
+          python3 -m pip install just.sh[test]
+      - name: Install Just on Linux
+        run: |
+          curl -L "https://github.com/casey/just/releases/download/1.17.0/just-1.17.0-x86_64-unknown-linux-musl.tar.gz" \
+            | sudo tar -C /usr/local/bin -xzv just
+      - name: Run tests
+        run: |
+          # Remove conflicting local pacakge
+          rm -rf just_sh/
+          just test
