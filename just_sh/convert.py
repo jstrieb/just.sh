@@ -1807,6 +1807,16 @@ def main(
             if os.path.isfile(filename):
                 justfile_path = filename
                 break
+
+    print(
+        f"""Compiling Justfile to shell script: `{
+            justfile_path if justfile_path != '-' else 'stdin'
+        }` -> `{
+            outfile_path if outfile_path != '-' else 'stdout'
+        }`""",
+        file=sys.stderr,
+    )
+
     if justfile_path is None or justfile_path == "-":
         justfile_data = sys.stdin.read()
     else:
@@ -1844,6 +1854,11 @@ def cli_entrypoint() -> None:
         return
 
     logging.basicConfig(format="%(levelname)s: %(message)s")
+
+    if sys.argv[0].endswith("just.sh"):
+        logging.warning(
+            "Call `./just.sh` instead of `just.sh` to execute the generated script."
+        )
 
     main(parsed_args.infile, parsed_args.outfile, verbose=parsed_args.verbose)
 
