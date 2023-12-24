@@ -51,6 +51,8 @@ FLAG_COMBOS = [
         )
     ],
     ["--evaluate"],
+    # Don't compare --help output - just.sh implements only some of the flags
+    # ["--help"],
     # Don't compare dump output – just reformats and canonicalizes the dump
     # ["--dump"],
 ]
@@ -1150,7 +1152,8 @@ NORMALIZE_REGEXES = [
     (re.compile(rb"\d{1,2}:\d{1,2}"), rb"12:00"),  # Normalize times
     (re.compile(rb"\nDid you mean[^\n]*"), rb""),
     (re.compile(rb"which wasn't expected"), rb"that wasn't expected"),
-    (re.compile(rb"\n\nUSAGE:\n(.+|\n+)+"), rb""),
+    # (re.compile(rb"(.+\n.+\n.+)?\n\nUSAGE:\n(.+|\n+)+"), rb""),  # TODO: Remove
+    (re.compile(rb"\[--\]\s*"), rb""),
     (
         re.compile(rb"(\s*-->[^\n]*\n)?\s*\|[^\n]*\n\s*\d*?\s*\|[^\n]*\n\s*\|[^\n]*"),
         rb"",

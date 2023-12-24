@@ -864,6 +864,8 @@ CYAN="$(test "${SHOW_COLOR}" = 'true' && printf "\\033[36m" || echo)"
 GREEN="$(test "${SHOW_COLOR}" = 'true' && printf "\\033[32m" || echo)"
 PINK="$(test "${SHOW_COLOR}" = 'true' && printf "\\033[35m" || echo)"
 BLUE="$(test "${SHOW_COLOR}" = 'true' && printf "\\033[34m" || echo)"
+TICK="$(printf '%s' '`')"
+DOLLAR="$(printf '%s' '$')"
 """
 
     def assign_variables_function() -> str:
@@ -1397,7 +1399,7 @@ change_workdir
       LIST_PREFIX="${{1}}"
       ;;
 
-    --unsorted)
+    -u|--unsorted)
       SORTED="false"
       ;;
     esac
@@ -1533,7 +1535,7 @@ set_var() {{
 summarizefn() {{
   while [ "$#" -gt 0 ]; do
     case "${{1}}" in
-    --unsorted)
+    -u|--unsorted)
       SORTED="false"
       ;;
     esac
@@ -1541,6 +1543,48 @@ summarizefn() {{
   done
 
   {recipe_summaries()}
+}}
+
+usage() {{
+  cat <<EOF
+${{GREEN}}just.sh${{NOCOLOR}} {__version__}
+Jacob Strieb
+    Auto-generated from a Justfile by just.sh - https://github.com/jstrieb/just.sh
+
+${{YELLOW}}USAGE:${{NOCOLOR}}
+    ./just.sh [FLAGS] [OPTIONS] [ARGUMENTS]...
+
+${{YELLOW}}FLAGS:${{NOCOLOR}}
+        ${{GREEN}}--choose${{NOCOLOR}}      Select one or more recipes to run using a binary. If ${{TICK}}--chooser${{TICK}} is not passed the chooser defaults to the value of ${{DOLLAR}}JUST_CHOOSER, falling back to ${{TICK}}fzf${{TICK}}
+        ${{GREEN}}--dump${{NOCOLOR}}        Print justfile
+        ${{GREEN}}--evaluate${{NOCOLOR}}    Evaluate and print all variables. If a variable name is given as an argument, only print that variable's value.
+        ${{GREEN}}--init${{NOCOLOR}}        Initialize new justfile in project root
+    ${{GREEN}}-l, --list${{NOCOLOR}}        List available recipes and their arguments
+        ${{GREEN}}--summary${{NOCOLOR}}     List names of available recipes
+    ${{GREEN}}-u, --unsorted${{NOCOLOR}}    Return list and summary entries in source order
+    ${{GREEN}}-h, --help${{NOCOLOR}}        Print help information
+    ${{GREEN}}-V, --version${{NOCOLOR}}     Print version information
+
+${{YELLOW}}OPTIONS:${{NOCOLOR}}
+        ${{GREEN}}--chooser <CHOOSER>${{NOCOLOR}}           Override binary invoked by ${{TICK}}--choose${{TICK}}
+        ${{GREEN}}--list-heading <TEXT>${{NOCOLOR}}         Print <TEXT> before list
+        ${{GREEN}}--list-prefix <TEXT>${{NOCOLOR}}          Print <TEXT> before each list item
+        ${{GREEN}}--set <VARIABLE> <VALUE>${{NOCOLOR}}      Override <VARIABLE> with <VALUE>
+        ${{GREEN}}--shell <SHELL>${{NOCOLOR}}               Invoke <SHELL> to run recipes
+        ${{GREEN}}--shell-arg <SHELL-ARG>${{NOCOLOR}}       Invoke shell with <SHELL-ARG> as an argument
+
+${{YELLOW}}ARGS:${{NOCOLOR}}
+    ${{GREEN}}<ARGUMENTS>...${{NOCOLOR}}    Overrides and recipe(s) to run, defaulting to the first recipe in the justfile
+EOF
+}}
+
+err_usage() {{
+  cat <<EOF >&2
+USAGE:
+    ./just.sh [FLAGS] [OPTIONS] [ARGUMENTS]...
+
+For more information try ${{GREEN}}--help${{NOCOLOR}}
+EOF
 }}
 
 {list_fn()}
@@ -1613,7 +1657,7 @@ while [ "${{#}}" -gt 0 ]; do
   {target_cases}
   
   # Built-in flags
-  --list)
+  -l|--list)
     shift 
     listfn "$@"
     RUN_DEFAULT="false"
@@ -1644,7 +1688,7 @@ while [ "${{#}}" -gt 0 ]; do
     shift
     ;;
 
-  --unsorted)
+  -u|--unsorted)
     SORTED="false"
     shift
     ;;
@@ -1661,7 +1705,7 @@ while [ "${{#}}" -gt 0 ]; do
     shift
     ;;
     
-  --version)
+  -V|--version)
     shift
     echo "just.sh {__version__}"
     echo
@@ -1670,10 +1714,9 @@ while [ "${{#}}" -gt 0 ]; do
     break
     ;;
 
-  --help)
+  -h|--help)
     shift
-    echo "No --help text yet..." >&2
-    # TODO
+    usage
     RUN_DEFAULT="false"
     break
     ;;
@@ -1745,7 +1788,8 @@ EOF
 
   -*)
     echo_error "Found argument '${{NOCOLOR}}${{YELLOW}}${{1}}${{NOCOLOR}}${{BOLD}}' that wasn't expected, or isn't valid in this context"
-    # TODO: Print usage/--help
+    echo >&2
+    err_usage
     exit 1
     ;;
 
