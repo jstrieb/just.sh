@@ -1,0 +1,390 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="just.sh transpiles Justfiles to portable, POSIX-compatible shell scripts. Try it from your browser, or download it from pip."
+    />
+
+    <title>
+      just.sh Online &ndash; Convert Justfiles to portable shell scripts
+    </title>
+
+    <script src="https://cdn.jsdelivr.net/pyodide/v0.24.1/full/pyodide.js"></script>
+
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/default.min.css"
+    />
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/bash.min.js"></script>
+
+    <style>
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+        font-family: inherit;
+        font-size: inherit;
+        color: inherit;
+        background: inherit;
+        border-color: inherit;
+        line-height: inherit;
+        border: none;
+        border-radius: 0;
+        outline: none;
+        font-family: sans-serif;
+        font-size: 12;
+        -webkit-appearance: none;
+      }
+
+      :root {
+        --fg-color: black;
+        --bg-color: white;
+      }
+
+      html {
+        width: 100vw;
+        height: 100vh;
+        min-width: 100vw;
+        min-height: 100vh;
+        max-width: 100vw;
+        max-height: 100vh;
+        width: 100dvw;
+        height: 100dvh;
+        min-width: 100dvw;
+        min-height: 100dvh;
+        max-width: 100dvw;
+        max-height: 100dvh;
+        color: var(--fg-color);
+        background: var(--bg-color);
+      }
+
+      body {
+        width: 100%;
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+        flex-wrap: nowrap;
+        justify-content: flex-start;
+        align-items: stretch;
+      }
+
+      button,
+      a.button {
+        padding: 0.5em;
+        border: 1px solid var(--fg-color);
+        cursor: pointer;
+        text-decoration: none;
+        box-shadow: 4px 4px 0 0 var(--fg-color);
+        user-select: none;
+      }
+
+      button:hover,
+      a.button:hover {
+        outline: 1px solid var(--fg-color);
+      }
+
+      button:active,
+      a.button:active {
+        box-shadow: 3px 3px 0 0 var(--fg-color);
+      }
+
+      textarea {
+        resize: none;
+      }
+
+      textarea,
+      pre,
+      pre.hljs,
+      pre *,
+      code {
+        overflow: auto;
+        font-family: monospace, monospace;
+        white-space: pre;
+        background: var(--bg-color);
+        color: var(--fg-color);
+      }
+
+      code {
+        overflow: unset;
+        margin: 0.25em 0;
+      }
+
+      hr {
+        width: 100%;
+        border: none;
+        margin: 1em 0;
+        flex-shrink: 1;
+      }
+
+      .title {
+        padding: 1em;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        text-align: center;
+        gap: 1em;
+      }
+
+      .title pre {
+        font-weight: bold;
+      }
+
+      .github {
+        position: fixed;
+        right: 0.5em;
+        top: 0.5em;
+      }
+
+      .loading {
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        padding: 1em;
+        flex-grow: 1;
+        display: none;
+        justify-content: center;
+        align-items: center;
+        text-align: center;
+      }
+
+      noscript {
+        width: 100%;
+        height: 100%;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        text-align: center;
+        padding: 1em;
+      }
+
+      .main {
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        flex-grow: 1;
+        display: none;
+        flex-direction: row;
+        flex-wrap: nowrap;
+        justify-content: space-between;
+        align-items: stretch;
+      }
+
+      .main > * {
+        padding: 0.75em;
+        padding-top: 0;
+      }
+
+      .main .left,
+      .main .right {
+        flex-grow: 1;
+        height: 100vh;
+        width: 100vw;
+        height: 100dvh;
+        width: 100dvw;
+        max-width: 100%;
+        max-height: 100%;
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+        flex-wrap: nowrap;
+        justify-content: flex-start;
+        align-items: stretch;
+      }
+
+      .main textarea,
+      .main pre {
+        padding: 0.5em;
+        flex-grow: 1;
+        border: 1px solid var(--fg-color);
+        box-shadow: 5px 5px 0 0 var(--fg-color);
+        height: 100%;
+      }
+
+      .buttons {
+        display: flex;
+        flex-direction: column;
+        flex-wrap: nowrap;
+        justify-content: center;
+        align-items: center;
+        gap: 0.5em;
+        white-space: pre;
+        overflow: auto;
+        min-height: 3.25em;
+        min-width: max-content;
+      }
+
+      @media (max-width: 600px) {
+        .title {
+          padding: 0.5em;
+        }
+
+        .github {
+          position: static;
+        }
+
+        .main {
+          flex-direction: column;
+        }
+
+        hr {
+          display: none;
+        }
+
+        .buttons {
+          flex-direction: row;
+          justify-content: flex-start;
+          min-width: auto;
+        }
+      }
+
+      .buttons > * {
+        width: 100%;
+      }
+    </style>
+  </head>
+
+  <body>
+    <div class="title">
+      <pre class="no-highlight">python3 -m pip install just.sh</pre>
+      <a
+        class="github button"
+        href="https://github.com/jstrieb/just.sh"
+        target="_blank"
+        >GitHub</a
+      >
+    </div>
+    <noscript>
+      This page requires no back end server to run &ndash; everything runs
+      client-side in the browser. As such, it requires JavaScript to run.
+    </noscript>
+    <div class="loading">Loading Pyodide (Python WASM runtime)...</div>
+    <div class="main">
+      <div class="left">
+        <code>Justfile</code>
+        <textarea>
+# Justfile from github.com/jstrieb/just.sh
+
+REQUIRED_COVERAGE := &quot;100&quot;
+
+# Run all tests, and check coverage
+test cores=&quot;auto&quot;:
+    python3 -m pytest \
+      -n {{ cores }} \
+      --failed-first \
+      --color yes \
+      --cov-config .coveragerc \
+      --cov-report html \
+      --cov . \
+      test/test.py
+    python3 -m coverage report \
+      --show-missing \
+      --fail-under {{ REQUIRED_COVERAGE }}
+
+# Test until the first failure
+first-fail:
+    python3 -m pytest -v --failed-first -x test/test.py
+
+alias lint := lint-python
+
+lint-python:
+    black .
+    mypy test/ just_sh/
+    ruff check --fix .
+
+# Fail if linting is required
+check:
+    black --check --diff --color .
+    mypy test/ just_sh/
+    ruff check .</textarea
+        >
+      </div>
+      <div class="buttons">
+        <button onclick="upload()">&larr; Upload</button>
+        <hr />
+        <!-- prettier-ignore -->
+        <button onclick="compile()" class="compile">&rarr; Compile &rarr;</button>
+        <hr />
+        <button onclick="download()">Download &rarr;</button>
+        <button onclick="copy()">Copy &rarr;</button>
+      </div>
+      <div class="right">
+        <code>just.sh</code>
+        <pre class="language-bash"></pre>
+      </div>
+    </div>
+    <script>
+      function upload() {
+        Object.assign(document.createElement("input"), {
+          type: "file",
+          onchange: async (e) => {
+            const files = e.target.files;
+            if (files.length < 1) {
+              return;
+            }
+            const file = files[0];
+            const text = await file.text();
+            document.querySelector(".main textarea").value = text;
+          },
+        }).click();
+      }
+
+      function compile() {
+        const justfile = document.querySelector(".main textarea").value;
+        try {
+          const result = pyodide.runPython(
+            "from just_sh import convert\nconvert.compile(justfile, 'just.sh', False)",
+            { locals: pyodide.toPy({ justfile: justfile }) },
+          );
+          const pre = document.querySelector(".main pre");
+          delete pre.dataset.highlighted;
+          pre.textContent = result;
+          hljs?.highlightAll();
+        } catch (e) {
+          alert(e);
+          console.error(e);
+        }
+      }
+
+      function download() {
+        const just_sh = document.querySelector(".main pre").innerText;
+        Object.assign(document.createElement("a"), {
+          href: URL.createObjectURL(new Blob([just_sh])),
+          target: "_blank",
+          download: "just.sh",
+        }).click();
+      }
+
+      function copy() {
+        const just_sh = document.querySelector(".main pre").innerText;
+        window.navigator?.clipboard?.writeText(just_sh);
+      }
+
+      if (window.screen.width <= 600) {
+        Array.from(document.querySelectorAll("*")).forEach((e) => {
+          document.body.innerHTML = document.body.innerHTML.replaceAll(
+            /\s*[←→]\s*/g,
+            "",
+          );
+        });
+      }
+
+      (async () => {
+        const loading = document.querySelector("div.loading");
+        loading.style.setProperty("display", "flex");
+        window.pyodide = await loadPyodide({
+          packages: ["micropip"],
+        });
+        await pyodide.pyimport("micropip").install("just.sh");
+
+        hljs?.configure({ cssSelector: "pre" });
+        compile();
+        document.querySelector("div.main").style.setProperty("display", "flex");
+        loading.style.setProperty("display", "none");
+      })();
+    </script>
+  </body>
+</html>
