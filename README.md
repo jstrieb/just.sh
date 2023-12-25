@@ -17,11 +17,15 @@ compatibility for each commit.
 
 # Install & Quick Start
 
+[Try `just.sh` online without installing.](https://jstrieb.github.io/just.sh/)
+
+Install `just.sh` locally with:
+
 ``` bash
 python3 -m pip install just.sh
 ```
 
-Once installed, run `just.sh` to convert a `justfile` to a shell script. Then,
+Once installed, run `just.sh` to convert a `Justfile` to a shell script. Then,
 run the generated script `./just.sh` as you would run `just`.
 
 ```
@@ -40,6 +44,13 @@ justfile just.sh
 $ ./just.sh --summary
 build lint test
 ```
+
+The `pip` installation script also installs the following aliases to the
+`just.sh` command-line tool:
+
+- `just_sh`
+- `just-sh`
+- `pyjust`
 
 # Project Status
 
