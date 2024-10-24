@@ -789,7 +789,7 @@ class CompilerState:
         return unique_targets
 
 
-def _compile(compiler_state: CompilerState, outfile_path: str, justfile: str) -> str:
+def _compile(compiler_state: CompilerState, outfile_path: str, justfile: str, deterministic: bool) -> str:
     def header_comment(text: str) -> str:
         border = "#" * 89
         return f"""{border}
@@ -797,13 +797,19 @@ def _compile(compiler_state: CompilerState, outfile_path: str, justfile: str) ->
 {border}"""
 
     def autogen_comment() -> str:
+
+        if deterministic:
+            compilation_timestamp_msg = " "
+        else:
+            compilation_timestamp_msg = f""" on {
+        datetime.datetime.now().strftime('%Y-%m-%d')             
+    } """
+
         return header_comment(
             f"""
 This script was auto-generated from a Justfile by just.sh.
 
-Generated on {
-    datetime.datetime.now().strftime('%Y-%m-%d')
-} with just.sh version {__version__}.
+Generated{compilation_timestamp_msg}with just.sh version {__version__}.
 https://github.com/jstrieb/just.sh
 
 Run `./{os.path.basename(outfile_path)} --dump` to recover the original Justfile.\n\n"""
@@ -1838,13 +1844,13 @@ fi
 ########################################################################################
 
 
-def compile(justfile: str, outfile_path: str, verbose: bool) -> str:
+def compile(justfile: str, outfile_path: str, verbose: bool, deterministic: bool) -> str:
     compiler_state = CompilerState(justfile_parse(justfile, verbose=verbose))
-    return _compile(compiler_state, outfile_path, justfile)
+    return _compile(compiler_state, outfile_path, justfile, deterministic=deterministic)
 
 
 def main(
-    justfile_path: Optional[str], outfile_path: str, verbose: bool = False
+    justfile_path: Optional[str], outfile_path: str, verbose: bool = False, deterministic: bool = False
 ) -> None:
     if justfile_path is None:
         for filename in ["justfile", ".justfile", "Justfile", ".Justfile"]:
@@ -1888,6 +1894,7 @@ def cli_entrypoint() -> None:
     parser.add_argument(
         "-v", "--verbose", action="store_true", help="Verbose parser output"
     )
+    parser.add_argument("-d", "--deterministic", action="store_true", help="Ensure deterministic output. Strips compilation timestamp.")
     parser.add_argument("--version", action="store_true", help="Print version string")
     parsed_args = parser.parse_args()
 
@@ -1904,7 +1911,7 @@ def cli_entrypoint() -> None:
             "Call `./just.sh` instead of `just.sh` to execute the generated script."
         )
 
-    main(parsed_args.infile, parsed_args.outfile, verbose=parsed_args.verbose)
+    main(parsed_args.infile, parsed_args.outfile, verbose=parsed_args.verbose, deterministic=parser.deterministic)
 
 
 if __name__ == "__main__":
