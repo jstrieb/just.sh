@@ -802,8 +802,8 @@ def _compile(compiler_state: CompilerState, outfile_path: str, justfile: str, de
             compilation_timestamp_msg = " "
         else:
             compilation_timestamp_msg = f""" on {
-        datetime.datetime.now().strftime('%Y-%m-%d')             
-    } """
+                datetime.datetime.now().strftime('%Y-%m-%d')             
+            } """
 
         return header_comment(
             f"""
