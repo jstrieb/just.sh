@@ -1874,10 +1874,10 @@ def main(
             justfile_data = f.read()
 
     if outfile_path == "-":
-        sys.stdout.write(compile(justfile_data, "just.sh", verbose))
+        sys.stdout.write(compile(justfile_data, "just.sh", verbose, deterministic=deterministic))
     else:
         with open(outfile_path, "w") as f:
-            f.write(compile(justfile_data, outfile_path, verbose))
+            f.write(compile(justfile_data, outfile_path, verbose, deterministic=deterministic))
         os.chmod(outfile_path, os.stat(outfile_path).st_mode | stat.S_IEXEC)
 
 
@@ -1911,7 +1911,7 @@ def cli_entrypoint() -> None:
             "Call `./just.sh` instead of `just.sh` to execute the generated script."
         )
 
-    main(parsed_args.infile, parsed_args.outfile, verbose=parsed_args.verbose, deterministic=parser.deterministic)
+    main(parsed_args.infile, parsed_args.outfile, verbose=parsed_args.verbose, deterministic=parsed_args.deterministic)
 
 
 if __name__ == "__main__":
