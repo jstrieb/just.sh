@@ -789,7 +789,9 @@ class CompilerState:
         return unique_targets
 
 
-def _compile(compiler_state: CompilerState, outfile_path: str, justfile: str, deterministic: bool) -> str:
+def _compile(
+    compiler_state: CompilerState, outfile_path: str, justfile: str, deterministic: bool
+) -> str:
     def header_comment(text: str) -> str:
         border = "#" * 89
         return f"""{border}
@@ -797,7 +799,6 @@ def _compile(compiler_state: CompilerState, outfile_path: str, justfile: str, de
 {border}"""
 
     def autogen_comment() -> str:
-
         if deterministic:
             compilation_timestamp_msg = " "
         else:
@@ -1844,13 +1845,18 @@ fi
 ########################################################################################
 
 
-def compile(justfile: str, outfile_path: str, verbose: bool, deterministic: bool) -> str:
+def compile(
+    justfile: str, outfile_path: str, verbose: bool, deterministic: bool
+) -> str:
     compiler_state = CompilerState(justfile_parse(justfile, verbose=verbose))
     return _compile(compiler_state, outfile_path, justfile, deterministic=deterministic)
 
 
 def main(
-    justfile_path: Optional[str], outfile_path: str, verbose: bool = False, deterministic: bool = False
+    justfile_path: Optional[str],
+    outfile_path: str,
+    verbose: bool = False,
+    deterministic: bool = False,
 ) -> None:
     if justfile_path is None:
         for filename in ["justfile", ".justfile", "Justfile", ".Justfile"]:
@@ -1874,10 +1880,16 @@ def main(
             justfile_data = f.read()
 
     if outfile_path == "-":
-        sys.stdout.write(compile(justfile_data, "just.sh", verbose, deterministic=deterministic))
+        sys.stdout.write(
+            compile(justfile_data, "just.sh", verbose, deterministic=deterministic)
+        )
     else:
         with open(outfile_path, "w") as f:
-            f.write(compile(justfile_data, outfile_path, verbose, deterministic=deterministic))
+            f.write(
+                compile(
+                    justfile_data, outfile_path, verbose, deterministic=deterministic
+                )
+            )
         os.chmod(outfile_path, os.stat(outfile_path).st_mode | stat.S_IEXEC)
 
 
@@ -1894,7 +1906,12 @@ def cli_entrypoint() -> None:
     parser.add_argument(
         "-v", "--verbose", action="store_true", help="Verbose parser output"
     )
-    parser.add_argument("-d", "--deterministic", action="store_true", help="Ensure deterministic output. Strips compilation timestamp.")
+    parser.add_argument(
+        "-d",
+        "--deterministic",
+        action="store_true",
+        help="Ensure deterministic output. Strips compilation timestamp.",
+    )
     parser.add_argument("--version", action="store_true", help="Print version string")
     parsed_args = parser.parse_args()
 
@@ -1911,7 +1928,12 @@ def cli_entrypoint() -> None:
             "Call `./just.sh` instead of `just.sh` to execute the generated script."
         )
 
-    main(parsed_args.infile, parsed_args.outfile, verbose=parsed_args.verbose, deterministic=parsed_args.deterministic)
+    main(
+        parsed_args.infile,
+        parsed_args.outfile,
+        verbose=parsed_args.verbose,
+        deterministic=parsed_args.deterministic,
+    )
 
 
 if __name__ == "__main__":
