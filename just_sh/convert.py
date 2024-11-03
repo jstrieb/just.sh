@@ -800,17 +800,17 @@ def _compile(
 
     def autogen_comment() -> str:
         if deterministic:
-            compilation_timestamp_msg = " "
+            generated_with = f"Generated with just.sh version {__version__}."
         else:
-            compilation_timestamp_msg = f""" on {
-                datetime.datetime.now().strftime('%Y-%m-%d')             
-            } """
+            generated_with = f"""Generated on {
+                datetime.datetime.now().strftime('%Y-%m-%d')
+            } with just.sh version {__version__}."""
 
         return header_comment(
             f"""
 This script was auto-generated from a Justfile by just.sh.
 
-Generated{compilation_timestamp_msg}with just.sh version {__version__}.
+{generated_with}
 https://github.com/jstrieb/just.sh
 
 Run `./{os.path.basename(outfile_path)} --dump` to recover the original Justfile.\n\n"""
