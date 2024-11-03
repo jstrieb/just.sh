@@ -63,14 +63,14 @@ dynamic = ["version"]
 # latest ones that support Python 3.7.
 test = [
     # Linting
-    "black >= 23.3.0",
-    "mypy >= 1.4.1",
-    "ruff >= 0.1.8",
+    "black ~= 23.3.0",
+    "mypy ~= 1.4.1",
+    "ruff ~= 0.1.8",
     # Testing
-    "pytest >= 7.4.3",
-    "coverage[toml] >= 6.5.0",
-    "pytest-cov >= 4.1.0",
-    "pytest-xdist >= 3.5.0",
+    "pytest ~= 7.4.3",
+    "coverage[toml] ~= 6.5.0",
+    "pytest-cov ~= 4.1.0",
+    "pytest-xdist ~= 3.5.0",
 ]
 
 [project.urls]
