@@ -107,6 +107,9 @@ omit = [
 ]
 
 [tool.coverage.report]
+omit = [
+    "__*__.py",
+]
 exclude_lines = [
     # Have to re-enable the standard pragma
     "pragma: no cover",
@@ -122,8 +125,7 @@ exclude_lines = [
 
     # Don't complain if non-runnable code isn't run
     "if __name__ == .__main__.:",
-    "cli_entrypoint\\(",
-    # "main\(",
+    "cli_entrypoint",
 
     # Ignore unused conditionals
     "pass",
