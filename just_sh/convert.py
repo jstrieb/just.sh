@@ -270,6 +270,8 @@ just_functions = {
     "sha256_file": r"""sha256_file() {
   if type sha256sum > /dev/null 2>&1; then
     sha256sum --binary "${1}" | cut -d ' ' -f 1
+  elif type shasum > /dev/null 2>&1; then
+    shasum --algorithm 256 --binary "${1}" | cut -d ' ' -f 1
   elif type python3 > /dev/null 2>&1; then
     python3 -c 'from hashlib import sha256; import sys; print(sha256(sys.stdin.buffer.read()).hexdigest())' \
       < "${1}"
@@ -285,6 +287,8 @@ just_functions = {
     "sha256": r"""sha256() {
   if type sha256sum > /dev/null 2>&1; then
     printf "%s" "${1}" | sha256sum --binary | cut -d ' ' -f 1
+  elif type shasum > /dev/null 2>&1; then
+    printf "%s" "${1}" | shasum --algorithm 256 --binary | cut -d ' ' -f 1
   elif type python3 > /dev/null 2>&1; then
     printf "%s" "${1}" | \
       python3 -c 'from hashlib import sha256; import sys; print(sha256(sys.stdin.buffer.read()).hexdigest())'
