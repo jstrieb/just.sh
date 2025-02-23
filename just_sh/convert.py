@@ -874,14 +874,16 @@ DOLLAR="$(printf '%s' '$')"
 
     def assign_variables_function() -> str:
         if compiler_state.variables:
-            variable_str = "\n".join(
-                f'''  {
-                    compiler_state.clean_var_name(var)
-                }={
-                    compiler_state.evaluate(expr)
-                } || exit "${{?}}"'''
-                for var, expr in compiler_state.variables.items()
-            )
+            variable_str_parts = []
+            for var, expr in compiler_state.variables.items():
+                name = compiler_state.clean_var_name(var)
+                value = compiler_state.evaluate(expr)
+                variable_str_parts.append(
+                    f"""  if [ -z "${{OVERRIDE_{name}:-}}" ]; then
+        {name}={value} || exit "${{?}}"
+      fi"""
+                )
+            variable_str = "\n".join(variable_str_parts)
         else:
             variable_str = "  # No user-declared variables"
         return f"""assign_variables() {{
@@ -1534,6 +1536,9 @@ echo_recipe_line() {{
             
 set_var() {{
   export "VAR_${{1}}=${{2}}"
+  export "OVERRIDE_VAR_${{1}}=true"
+  HAS_RUN_assign_variables=
+  assign_variables || exit "${{?}}"
 }}
             
 summarizefn() {{

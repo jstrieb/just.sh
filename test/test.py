@@ -1067,6 +1067,26 @@ empty arg="nondefault":
             ["with-args", "the arg", "first-dep"],
         ],
     ),
+    # Test for regression on bug #3
+    # https://github.com/jstrieb/just.sh/issues/3
+    (
+        r"""
+foo := "111"
+bar := "000" + foo
+
+@do:
+    echo foo: {{ foo }}
+    echo bar: {{ bar }}
+""",
+        [
+            *permuted_combinations("foo=222", "bar=333"),
+            *permuted_combinations(("--set", "foo", "444"), ("--set", "bar", "555")),
+            ["--set", "foo", "444", "bar=333"],
+            ["--set", "foo", "444", "foo=222"],
+            ["--set", "bar", "555", "foo=222"],
+            ["--set", "bar", "555", "bar=333"],
+        ],
+    ),
     reverse=False,
 )
 
