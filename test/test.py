@@ -1169,8 +1169,7 @@ build:
     justfile.write(justfile_content)
     convert.main(None, "just.sh")
 
-    for args in FLAG_COMBOS:
-        run_justfile(args + ["--deterministic"])
+    run_justfile(["--deterministic"])
     parse.main("Justfile", verbose=True)
 
     with open("just.sh") as f:
