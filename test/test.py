@@ -1159,6 +1159,26 @@ def test_evalute_without_quoting() -> None:
     assert state.evaluate("testing", quote=False) == "testing"
 
 
+def test_deterministic(tmpdir: Any) -> None:
+    tmpdir.chdir()
+    justfile_content = """
+build:
+  echo Building…
+"""
+    justfile = tmpdir.join("Justfile")
+    justfile.write(justfile_content)
+    convert.main(None, "just.sh")
+
+    for args in FLAG_COMBOS:
+        run_justfile(args + ["--deterministic"])
+    parse.main("Justfile", verbose=True)
+
+    with open("just.sh", "r") as f:
+        just_sh_content = f.read()
+
+    assert "Generated on" not in just_sh_content
+
+
 NORMALIZE_REGEXES = [
     (re.compile(rb"(\./)?just\.sh"), rb"just"),
     (re.compile(rb"Justfile"), rb"just"),
