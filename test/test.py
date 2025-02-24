@@ -1173,7 +1173,7 @@ build:
         run_justfile(args + ["--deterministic"])
     parse.main("Justfile", verbose=True)
 
-    with open("just.sh", "r") as f:
+    with open("just.sh") as f:
         just_sh_content = f.read()
 
     assert "Generated on" not in just_sh_content
