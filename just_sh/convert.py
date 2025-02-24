@@ -270,6 +270,8 @@ just_functions = {
     "sha256_file": r"""sha256_file() {
   if type sha256sum > /dev/null 2>&1; then
     sha256sum --binary "${1}" | cut -d ' ' -f 1
+  elif type shasum > /dev/null 2>&1; then
+    shasum --algorithm 256 --binary "${1}" | cut -d ' ' -f 1
   elif type python3 > /dev/null 2>&1; then
     python3 -c 'from hashlib import sha256; import sys; print(sha256(sys.stdin.buffer.read()).hexdigest())' \
       < "${1}"
@@ -285,6 +287,8 @@ just_functions = {
     "sha256": r"""sha256() {
   if type sha256sum > /dev/null 2>&1; then
     printf "%s" "${1}" | sha256sum --binary | cut -d ' ' -f 1
+  elif type shasum > /dev/null 2>&1; then
+    printf "%s" "${1}" | shasum --algorithm 256 --binary | cut -d ' ' -f 1
   elif type python3 > /dev/null 2>&1; then
     printf "%s" "${1}" | \
       python3 -c 'from hashlib import sha256; import sys; print(sha256(sys.stdin.buffer.read()).hexdigest())'
@@ -877,14 +881,16 @@ DOLLAR="$(printf '%s' '$')"
 
     def assign_variables_function() -> str:
         if compiler_state.variables:
-            variable_str = "\n".join(
-                f'''  {
-                    compiler_state.clean_var_name(var)
-                }={
-                    compiler_state.evaluate(expr)
-                } || exit "${{?}}"'''
-                for var, expr in compiler_state.variables.items()
-            )
+            variable_str_parts = []
+            for var, expr in compiler_state.variables.items():
+                name = compiler_state.clean_var_name(var)
+                value = compiler_state.evaluate(expr)
+                variable_str_parts.append(
+                    f"""  if [ -z "${{OVERRIDE_{name}:-}}" ]; then
+        {name}={value} || exit "${{?}}"
+      fi"""
+                )
+            variable_str = "\n".join(variable_str_parts)
         else:
             variable_str = "  # No user-declared variables"
         return f"""assign_variables() {{
@@ -1537,6 +1543,9 @@ echo_recipe_line() {{
             
 set_var() {{
   export "VAR_${{1}}=${{2}}"
+  export "OVERRIDE_VAR_${{1}}=true"
+  HAS_RUN_assign_variables=
+  assign_variables || exit "${{?}}"
 }}
             
 summarizefn() {{
