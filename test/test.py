@@ -1167,10 +1167,7 @@ build:
 """
     justfile = tmpdir.join("Justfile")
     justfile.write(justfile_content)
-    convert.main(None, "just.sh")
-
-    run_justfile(["--deterministic"])
-    parse.main("Justfile", verbose=True)
+    convert.main(None, "just.sh", deterministic=True)
 
     with open("just.sh") as f:
         just_sh_content = f.read()
