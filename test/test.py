@@ -1174,6 +1174,15 @@ build:
 
     assert "Generated on" not in just_sh_content
 
+    justfile = tmpdir.join("Justfile")
+    justfile.write(justfile_content)
+    convert.main(None, "just.sh", deterministic=False)
+
+    with open("just.sh") as f:
+        just_sh_content = f.read()
+
+    assert "Generated on" in just_sh_content
+
 
 NORMALIZE_REGEXES = [
     (re.compile(rb"(\./)?just\.sh"), rb"just"),
